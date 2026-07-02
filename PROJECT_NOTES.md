@@ -10,15 +10,19 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Current Milestone
 
-Milestone 1 — FastAPI backend base without AI.
+## Milestone 1 — Completed
 
-Delivered in this milestone:
+Implemented the FastAPI backend foundation with:
 
-- `GET /health` endpoint
-- `POST /repositories/scan` endpoint
-- Local repository scanner with ignored directories and file filtering
-- Layered architecture ready for future RAG and agents
-- pytest coverage for health, scanner, and API error paths
+- Health check endpoint
+- Local repository scan endpoint
+- Clean layered structure
+- Repository scanner service
+- File filtering for generated/cache directories
+- Basic pytest coverage
+
+Next milestone:
+Prepare repository content for indexing by extracting readable source files and creating chunks with metadata.
 
 ## Tech Stack
 
@@ -33,14 +37,14 @@ Delivered in this milestone:
 
 ### Layered boundaries
 
-| Layer | Responsibility |
-|-------|----------------|
+| Layer        | Responsibility                                             |
+| ------------ | ---------------------------------------------------------- |
 | `api/routes` | HTTP only: request parsing, status codes, response mapping |
-| `schemas` | Pydantic models for API input/output |
-| `domain` | Internal dataclasses with no FastAPI dependency |
-| `services` | Business logic (repository scanning) |
-| `utils` | Small reusable helpers (file filtering, line counting) |
-| `core` | Shared config and domain errors |
+| `schemas`    | Pydantic models for API input/output                       |
+| `domain`     | Internal dataclasses with no FastAPI dependency            |
+| `services`   | Business logic (repository scanning)                       |
+| `utils`      | Small reusable helpers (file filtering, line counting)     |
+| `core`       | Shared config and domain errors                            |
 
 ### Scanner behavior
 
