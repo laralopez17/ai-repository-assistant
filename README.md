@@ -6,7 +6,14 @@ Backend service that scans local code repositories and returns structural metada
 
 - FastAPI backend with health check and repository scan endpoints
 - Local filesystem scanning with ignored directories and binary/large file filtering
-- No AI, database, or GitHub integration yet
+
+## Milestone 2
+
+- Content extraction from scanned repository files
+- Line-based chunking with overlap for future RAG indexing
+- `POST /repositories/chunks` endpoint with skipped-file traceability
+
+No AI, database, or GitHub integration yet
 
 ## Requirements
 
@@ -52,6 +59,22 @@ Request:
 ```
 
 Response includes `repository_path`, `total_files`, `total_lines`, `languages`, `files`, and `ignored_directories`.
+
+### `POST /repositories/chunks`
+
+Extracts readable file content and splits it into overlapping line-based chunks.
+
+Request:
+
+```json
+{
+  "path": "D:/projects/my-repo",
+  "max_lines_per_chunk": 80,
+  "overlap_lines": 10
+}
+```
+
+Response includes `repository_path`, `total_files_processed`, `total_files_skipped`, `total_chunks`, `chunks`, and `skipped_files`.
 
 ## Run tests
 

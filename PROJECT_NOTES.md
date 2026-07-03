@@ -10,7 +10,19 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Current Milestone
 
-## Milestone 1 — Completed
+### Milestone 2 — Repository Content Extraction & Chunking
+
+Implemented on top of Milestone 1:
+
+- `POST /repositories/chunks` endpoint
+- `ContentExtractor` for safe UTF-8 file reading with skipped-file traceability
+- `ChunkingService` for line-based chunking with overlap
+- Domain models: `FileContent`, `ContentChunk`, `SkippedFile`, `ChunkingResult`
+- Tests for extraction, chunking, and API behavior
+
+Still excluded: LLM APIs, embeddings, vector databases, agents, MCP, Docker.
+
+### Milestone 1 — Completed
 
 Implemented the FastAPI backend foundation with:
 
@@ -42,7 +54,7 @@ Prepare repository content for indexing by extracting readable source files and 
 | `api/routes` | HTTP only: request parsing, status codes, response mapping |
 | `schemas`    | Pydantic models for API input/output                       |
 | `domain`     | Internal dataclasses with no FastAPI dependency            |
-| `services`   | Business logic (repository scanning)                       |
+| `services`   | Business logic (scanning, extraction, chunking)            |
 | `utils`      | Small reusable helpers (file filtering, line counting)     |
 | `core`       | Shared config and domain errors                            |
 
@@ -78,11 +90,11 @@ Prepare repository content for indexing by extracting readable source files and 
 - Practice clean backend structure.
 - Build confidence reading and reviewing AI-generated code.
 
-## Next Steps (Milestone 2+)
+## Next Steps (Milestone 3+)
 
-1. Add persistence for scan results (SQLite or Postgres).
-2. Chunk and embed file contents for RAG.
-3. Add query endpoint backed by vector search.
+1. Embed chunks and store vectors for retrieval.
+2. Add query endpoint backed by vector search.
+3. Add persistence for scan/chunk results (SQLite or Postgres).
 4. Integrate GitHub API for remote repository ingestion.
 5. Add Docker and deployment configuration.
 6. Introduce agent orchestration once basic RAG is stable.

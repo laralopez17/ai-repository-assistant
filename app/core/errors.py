@@ -10,3 +10,7 @@ class PathNotFoundError(AppError):
 
 class NotADirectoryError(AppError):
     pass
+
+
+class InvalidChunkingConfigError(AppError):
+    pass
