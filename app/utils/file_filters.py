@@ -1,10 +1,31 @@
 from pathlib import Path
+import fnmatch
 
-from app.core.config import BINARY_SAMPLE_SIZE, MAX_FILE_SIZE_BYTES
+from app.core.config import (
+    BINARY_SAMPLE_SIZE,
+    DEFAULT_IGNORED_FILE_GLOBS,
+    DEFAULT_IGNORED_FILES,
+    MAX_FILE_SIZE_BYTES,
+)
 
 
 def is_ignored_directory(name: str, ignored_names: frozenset[str]) -> bool:
     return name in ignored_names
+
+
+def is_ignored_file(
+    path: Path,
+    ignored_names: frozenset[str] | None = None,
+    ignored_globs: tuple[str, ...] | None = None,
+) -> bool:
+    file_names = ignored_names if ignored_names is not None else DEFAULT_IGNORED_FILES
+    file_globs = ignored_globs if ignored_globs is not None else DEFAULT_IGNORED_FILE_GLOBS
+    file_name = path.name
+
+    if file_name in file_names:
+        return True
+
+    return any(fnmatch.fnmatch(file_name, pattern) for pattern in file_globs)
 
 
 def is_binary_file(path: Path) -> bool:

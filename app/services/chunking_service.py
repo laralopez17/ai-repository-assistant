@@ -1,5 +1,6 @@
 from app.core.errors import InvalidChunkingConfigError
 from app.domain.models import ContentChunk, FileContent
+from app.utils.source_type import detect_source_type
 
 
 class ChunkingService:
@@ -56,6 +57,10 @@ class ChunkingService:
                     start_line=start_line,
                     end_line=end_line,
                     content="\n".join(chunk_lines),
+                    source_type=detect_source_type(
+                        normalized_path,
+                        file_content.extension,
+                    ),
                 )
             )
 

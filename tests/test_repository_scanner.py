@@ -89,3 +89,45 @@ def test_scan_ignores_pytest_cache(tmp_path: Path):
     assert result.files[0].relative_path == "main.py"
     assert ".pytest_cache" in result.ignored_directories
     assert all(".pytest_cache" not in file.relative_path for file in result.files)
+
+
+def test_scan_skips_env_file(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "main.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / ".env").write_text("OPENAI_API_KEY=super-secret\n", encoding="utf-8")
+
+    scanner = RepositoryScanner()
+    result = scanner.scan(repo)
+
+    assert result.total_files == 1
+    assert result.files[0].relative_path == "main.py"
+    assert ".env" in result.ignored_files
+
+
+def test_scan_skips_env_local_file(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / ".env.local").write_text("SECRET=local-only\n", encoding="utf-8")
+
+    scanner = RepositoryScanner()
+    result = scanner.scan(repo)
+
+    assert {file.relative_path for file in result.files} == {"app.py"}
+    assert ".env.local" in result.ignored_files
+
+
+def test_scan_skips_pem_and_key_files(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / "server.pem").write_text("-----BEGIN CERT-----\n", encoding="utf-8")
+    (repo / "private.key").write_text("private-key-data\n", encoding="utf-8")
+
+    scanner = RepositoryScanner()
+    result = scanner.scan(repo)
+
+    assert {file.relative_path for file in result.files} == {"app.py"}
+    assert "server.pem" in result.ignored_files
+    assert "private.key" in result.ignored_files

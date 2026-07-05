@@ -1,11 +1,11 @@
 # AI Repository Assistant
 
-Backend service that scans local code repositories and returns structural metadata about files, extensions, and line counts. Built as the foundation for future RAG and agent-based analysis.
+Backend service that scans local code repositories, chunks readable content, and supports semantic search over indexed chunks. Built as the foundation for future RAG and agent-based analysis.
 
 ## Milestone 1
 
 - FastAPI backend with health check and repository scan endpoints
-- Local filesystem scanning with ignored directories and binary/large file filtering
+- Local filesystem scanning with ignored directories, sensitive file filtering, and binary/large file filtering
 
 ## Milestone 2
 
@@ -13,7 +13,13 @@ Backend service that scans local code repositories and returns structural metada
 - Line-based chunking with overlap for future RAG indexing
 - `POST /repositories/chunks` endpoint with skipped-file traceability
 
-No AI, database, or GitHub integration yet
+## Milestone 3
+
+- OpenAI and Gemini embedding providers behind a shared abstraction
+- In-memory vector store with cosine similarity search
+- `POST /repositories/index` and `POST /repositories/search` endpoints
+
+No LLM answer generation, external vector DB, or GitHub integration yet.
 
 ## Requirements
 
@@ -26,7 +32,47 @@ No AI, database, or GitHub integration yet
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env
 ```
+
+### Local development (no external API calls)
+
+Use the fake embedding provider:
+
+```env
+EMBEDDING_PROVIDER=fake
+MAX_CHUNKS_TO_EMBED=50
+```
+
+This lets you manually test `/repositories/index` and `/repositories/search` without OpenAI or Gemini credentials.
+
+### Production embedding providers
+
+OpenAI (default):
+
+```env
+EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=your-key
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+For Gemini:
+
+```env
+EMBEDDING_PROVIDER=gemini
+GEMINI_API_KEY=your-key
+GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+```
+
+### OpenAI billing / quota
+
+Indexing calls the embedding API once per chunk batch. If your OpenAI account has no billing or exceeded quota, `/repositories/index` returns `402` with a clear message instead of a raw server error.
+
+Use `EMBEDDING_PROVIDER=fake` for local development, or ensure your OpenAI account has active billing before indexing real repositories.
+
+### Safety limit: `MAX_CHUNKS_TO_EMBED`
+
+Default: `50`. If a repository produces more chunks than this limit, indexing stops **before** any embedding API call and returns `400` with a clear error. Increase the limit only when you intentionally want to index larger repositories.
 
 ## Run the API
 
@@ -58,7 +104,13 @@ Request:
 { "path": "D:/projects/my-repo" }
 ```
 
-Response includes `repository_path`, `total_files`, `total_lines`, `languages`, `files`, and `ignored_directories`.
+Response includes `repository_path`, `total_files`, `total_lines`, `languages`, `files`, `ignored_directories`, and `ignored_files`.
+
+### Security: excluded secret files
+
+The scanner intentionally skips sensitive files such as `.env`, `.env.local`, `*.pem`, `*.key`, `id_rsa`, `credentials.json`, and `secrets.json`. These files are never chunked or indexed.
+
+**Never commit `.env` files to git.** Keep API keys out of repositories you scan in production.
 
 ### `POST /repositories/chunks`
 
@@ -76,11 +128,48 @@ Request:
 
 Response includes `repository_path`, `total_files_processed`, `total_files_skipped`, `total_chunks`, `chunks`, and `skipped_files`.
 
+### `POST /repositories/index`
+
+Indexes repository chunks with embeddings for semantic search.
+
+Request:
+
+```json
+{
+  "path": "D:/projects/my-repo",
+  "max_lines_per_chunk": 80,
+  "overlap_lines": 10
+}
+```
+
+Response includes `index_id`, `repository_path`, `total_chunks_indexed`, and `embedding_model`.
+
+### `POST /repositories/search`
+
+Searches an indexed repository by semantic similarity.
+
+Request:
+
+```json
+{
+  "index_id": "some-generated-id",
+  "query": "Where is the chunking logic implemented?",
+  "top_k": 5,
+  "include_tests": false
+}
+```
+
+Each result includes `source_type` (`source`, `test`, `docs`, `config`, or `other`). Set `include_tests` to `false` to exclude test files from results without changing similarity scoring.
+
+Response includes `index_id`, `query`, `total_results`, and ranked `results`.
+
 ## Run tests
 
 ```bash
 pytest
 ```
+
+Tests use a fake embedding provider and never call OpenAI or Gemini.
 
 ## Project structure
 

@@ -2,20 +2,32 @@ import os
 from collections import Counter
 from pathlib import Path
 
-from app.core.config import DEFAULT_IGNORED_DIRECTORIES
+from app.core.config import (
+    DEFAULT_IGNORED_DIRECTORIES,
+    DEFAULT_IGNORED_FILE_GLOBS,
+    DEFAULT_IGNORED_FILES,
+)
 from app.core.errors import NotADirectoryError, PathNotFoundError
 from app.domain.models import LanguageCount, ScanResult, ScannedFile
 from app.utils.file_filters import (
     count_lines,
     is_ignored_directory,
+    is_ignored_file,
     normalize_extension,
     should_skip_file,
 )
 
 
 class RepositoryScanner:
-    def __init__(self, ignored_directories: frozenset[str] | None = None) -> None:
+    def __init__(
+        self,
+        ignored_directories: frozenset[str] | None = None,
+        ignored_files: frozenset[str] | None = None,
+        ignored_file_globs: tuple[str, ...] | None = None,
+    ) -> None:
         self._ignored_directories = ignored_directories or DEFAULT_IGNORED_DIRECTORIES
+        self._ignored_files = ignored_files or DEFAULT_IGNORED_FILES
+        self._ignored_file_globs = ignored_file_globs or DEFAULT_IGNORED_FILE_GLOBS
 
     def scan(self, path: str | Path) -> ScanResult:
         repository_path = Path(path).expanduser().resolve()
@@ -28,6 +40,7 @@ class RepositoryScanner:
 
         files: list[ScannedFile] = []
         ignored_directories: set[str] = set()
+        ignored_files: set[str] = set()
         extension_counts: Counter[str] = Counter()
 
         for current_dir, dir_names, file_names in self._walk(repository_path):
@@ -37,6 +50,14 @@ class RepositoryScanner:
             for file_name in file_names:
                 file_path = current_dir / file_name
                 relative_path = file_path.relative_to(repository_path).as_posix()
+
+                if is_ignored_file(
+                    file_path,
+                    self._ignored_files,
+                    self._ignored_file_globs,
+                ):
+                    ignored_files.add(relative_path)
+                    continue
 
                 if should_skip_file(file_path):
                     continue
@@ -67,6 +88,7 @@ class RepositoryScanner:
             languages=languages,
             files=sorted(files, key=lambda file: file.relative_path),
             ignored_directories=sorted(ignored_directories),
+            ignored_files=sorted(ignored_files),
         )
 
     def _walk(self, root: Path):

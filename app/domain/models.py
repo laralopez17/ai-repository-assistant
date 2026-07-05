@@ -23,6 +23,7 @@ class ScanResult:
     languages: list[LanguageCount] = field(default_factory=list)
     files: list[ScannedFile] = field(default_factory=list)
     ignored_directories: list[str] = field(default_factory=list)
+    ignored_files: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class ContentChunk:
     start_line: int
     end_line: int
     content: str
+    source_type: str
 
 
 @dataclass
@@ -62,3 +64,34 @@ class ChunkingResult:
     total_chunks: int
     chunks: list[ContentChunk] = field(default_factory=list)
     skipped_files: list[SkippedFile] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class EmbeddedChunk:
+    chunk_id: str
+    file_path: str
+    extension: str
+    start_line: int
+    end_line: int
+    content: str
+    source_type: str
+    embedding: list[float]
+
+
+@dataclass(frozen=True)
+class RepositoryIndex:
+    index_id: str
+    repository_path: str
+    total_chunks_indexed: int
+    embedding_model: str
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    chunk_id: str
+    file_path: str
+    start_line: int
+    end_line: int
+    score: float
+    content: str
+    source_type: str
