@@ -10,7 +10,7 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Current Milestone
 
-### Milestone 2 — Repository Content Extraction & Chunking
+### Milestone 2 — Repository Content Extraction & Chunking — Completed
 
 Implemented on top of Milestone 1:
 
