@@ -6,13 +6,17 @@ from app.core.errors import (
     EmbeddingProviderError,
     IndexNotFoundError,
     InvalidChunkingConfigError,
+    LLMProviderError,
     MissingApiKeyError,
     NotADirectoryError,
     PathNotFoundError,
     UnsupportedProviderError,
 )
-from app.domain.models import ChunkingResult, ScanResult
+from app.domain.models import ChunkingResult, RAGAnswerResult, ScanResult
 from app.schemas.repository import (
+    AskRequest,
+    AskResponse,
+    AskSourceInfo,
     ChunkInfo,
     ChunkRequest,
     ChunksResponse,
@@ -31,6 +35,9 @@ from app.services.chunking_service import ChunkingService
 from app.services.content_extractor import ContentExtractor
 from app.services.embedding_factory import get_embedding_provider
 from app.services.embedding_provider import EmbeddingProvider
+from app.services.llm_provider_factory import get_llm_provider
+from app.services.llm_provider import LLMProvider
+from app.services.rag_answer_service import RAGAnswerService
 from app.services.repository_indexer import RepositoryIndexer
 from app.services.repository_scanner import RepositoryScanner
 from app.services.semantic_search_service import SemanticSearchService
@@ -80,6 +87,16 @@ def get_semantic_search_service(
     return SemanticSearchService(
         embedding_provider=embedding_provider,
         vector_store=vector_store,
+    )
+
+
+def get_rag_answer_service(
+    semantic_search_service: SemanticSearchService = Depends(get_semantic_search_service),
+    llm_provider: LLMProvider = Depends(get_llm_provider),
+) -> RAGAnswerService:
+    return RAGAnswerService(
+        semantic_search_service=semantic_search_service,
+        llm_provider=llm_provider,
     )
 
 
@@ -158,6 +175,11 @@ def _map_repository_errors(error: AppError) -> HTTPException:
             detail=error.message,
         )
     if isinstance(error, EmbeddingProviderError):
+        return HTTPException(
+            status_code=error.status_code or status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=error.message,
+        )
+    if isinstance(error, LLMProviderError):
         return HTTPException(
             status_code=error.status_code or status.HTTP_429_TOO_MANY_REQUESTS,
             detail=error.message,
@@ -283,3 +305,40 @@ def search_repository(
             for result in results
         ],
     )
+
+
+def _to_ask_response(result: RAGAnswerResult) -> AskResponse:
+    return AskResponse(
+        index_id=result.index_id,
+        question=result.question,
+        answer=result.answer,
+        sources=[
+            AskSourceInfo(
+                chunk_id=source.chunk_id,
+                file_path=source.file_path,
+                start_line=source.start_line,
+                end_line=source.end_line,
+                score=round(source.score, 4),
+                source_type=source.source_type,
+            )
+            for source in result.sources
+        ],
+    )
+
+
+@router.post("/ask", response_model=AskResponse)
+def ask_repository(
+    request: AskRequest,
+    rag_answer_service: RAGAnswerService = Depends(get_rag_answer_service),
+) -> AskResponse:
+    try:
+        result = rag_answer_service.answer(
+            request.index_id,
+            request.question,
+            request.top_k,
+            request.include_tests,
+        )
+    except AppError as error:
+        raise _map_repository_errors(error) from error
+
+    return _to_ask_response(result)

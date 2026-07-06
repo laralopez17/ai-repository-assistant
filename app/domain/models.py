@@ -95,3 +95,21 @@ class SearchResult:
     score: float
     content: str
     source_type: str
+
+
+@dataclass(frozen=True)
+class SourceCitation:
+    chunk_id: str
+    file_path: str
+    start_line: int
+    end_line: int
+    score: float
+    source_type: str
+
+
+@dataclass(frozen=True)
+class RAGAnswerResult:
+    index_id: str
+    question: str
+    answer: str
+    sources: list[SourceCitation]

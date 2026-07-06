@@ -10,20 +10,19 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Current Milestone
 
-### Milestone 3 — Embeddings + In-Memory Semantic Search
+### Milestone 4 — RAG Answering with Citations (completed)
 
-Implemented on top of Milestones 1 and 2:
+Implemented on top of Milestones 1–3:
 
-- `EmbeddingProvider` abstraction with OpenAI, Gemini, and fake providers
-- `VectorStore` with in-memory cosine similarity search
-- `RepositoryIndexer` orchestrating scan → extract → chunk → embed → store
-- `SemanticSearchService` for query embedding and ranked retrieval
-- `POST /repositories/index` and `POST /repositories/search` endpoints
-- Tests use `FakeEmbeddingProvider` only; no external API calls in CI
+- `LLMProvider` abstraction with OpenAI, Gemini, and fake providers
+- `RAGAnswerService` orchestrating semantic search + grounded answer generation
+- `POST /repositories/ask` endpoint returning answer + source citations
+- Prompt construction in `rag_prompt.py` for real LLM providers
+- Tests use fake providers only; no external API calls in CI
 
-Still excluded: LLM answer generation, RAG synthesis, agents, MCP, Docker, external vector DB.
+Still excluded: agents, tool calling, MCP, Docker, external vector DB, persistence.
 
-### Milestone 2 — Completed
+### Milestone 3 — Completed
 
 Implemented the FastAPI backend foundation with:
 
@@ -129,10 +128,17 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 - Search accepts `include_tests` (default `true`) to filter out test chunks after similarity ranking.
 - No persistence yet; indexes live for the process lifetime.
 
-## Next Steps (Milestone 4+)
+### RAG answering
 
-1. Add RAG query endpoint with LLM answer synthesis and citations.
-2. Add persistence for indexes (SQLite or Postgres).
-3. Integrate GitHub API for remote repository ingestion.
-4. Add Docker and deployment configuration.
-5. Introduce agent orchestration once basic RAG is stable.
+- `/repositories/search` returns ranked chunks only.
+- `/repositories/ask` reuses `SemanticSearchService`, then calls `LLMProvider` to synthesize a grounded answer.
+- Prompt templates live in `rag_prompt.py`; providers only handle API calls.
+- Sources are returned separately from the answer (metadata only, no chunk body in citations).
+- If retrieval returns no chunks, the service answers with a safe insufficient-context message without calling the LLM.
+
+## Next Steps (Milestone 5+)
+
+1. Add persistence for indexes and conversation history.
+2. Integrate GitHub API for remote repository ingestion.
+3. Add Docker and deployment configuration.
+4. Introduce agent orchestration once basic RAG is stable.

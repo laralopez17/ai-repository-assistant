@@ -18,8 +18,15 @@ Backend service that scans local code repositories, chunks readable content, and
 - OpenAI and Gemini embedding providers behind a shared abstraction
 - In-memory vector store with cosine similarity search
 - `POST /repositories/index` and `POST /repositories/search` endpoints
+- `source_type` metadata and `include_tests` filtering
 
-No LLM answer generation, external vector DB, or GitHub integration yet.
+## Milestone 4
+
+- `LLMProvider` abstraction with OpenAI, Gemini, and fake providers
+- `RAGAnswerService` for retrieval + grounded answer generation
+- `POST /repositories/ask` endpoint with citations
+
+No agents, external vector DB, or GitHub integration yet.
 
 ## Requirements
 
@@ -41,10 +48,11 @@ Use the fake embedding provider:
 
 ```env
 EMBEDDING_PROVIDER=fake
+LLM_PROVIDER=fake
 MAX_CHUNKS_TO_EMBED=50
 ```
 
-This lets you manually test `/repositories/index` and `/repositories/search` without OpenAI or Gemini credentials.
+This lets you manually test `/repositories/index`, `/repositories/search`, and `/repositories/ask` without OpenAI or Gemini credentials.
 
 ### Production embedding providers
 
@@ -62,6 +70,20 @@ For Gemini:
 EMBEDDING_PROVIDER=gemini
 GEMINI_API_KEY=your-key
 GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+```
+
+For LLM answering with OpenAI:
+
+```env
+LLM_PROVIDER=openai
+OPENAI_CHAT_MODEL=gpt-4.1-mini
+```
+
+For Gemini chat:
+
+```env
+LLM_PROVIDER=gemini
+GEMINI_CHAT_MODEL=gemini-2.0-flash
 ```
 
 ### OpenAI billing / quota
@@ -163,13 +185,30 @@ Each result includes `source_type` (`source`, `test`, `docs`, `config`, or `othe
 
 Response includes `index_id`, `query`, `total_results`, and ranked `results`.
 
+### `POST /repositories/ask`
+
+Answers a question about an already indexed repository using retrieved chunks and an LLM.
+
+Request:
+
+```json
+{
+  "index_id": "some-generated-id",
+  "question": "Where is the chunking logic implemented?",
+  "top_k": 5,
+  "include_tests": false
+}
+```
+
+Response includes `answer` and `sources` (file path, line range, score, `source_type`). Requires a prior call to `/repositories/index`; it does not reindex.
+
 ## Run tests
 
 ```bash
 pytest
 ```
 
-Tests use a fake embedding provider and never call OpenAI or Gemini.
+Tests use fake embedding and LLM providers and never call OpenAI or Gemini.
 
 ## Project structure
 

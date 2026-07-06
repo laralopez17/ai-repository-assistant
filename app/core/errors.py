@@ -33,5 +33,9 @@ class EmbeddingProviderError(AppError):
     pass
 
 
+class LLMProviderError(AppError):
+    pass
+
+
 class ChunkLimitExceededError(AppError):
     pass

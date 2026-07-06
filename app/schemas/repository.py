@@ -104,3 +104,26 @@ class SearchResponse(BaseModel):
     query: str
     total_results: int
     results: list[SearchResultInfo]
+
+
+class AskRequest(BaseModel):
+    index_id: str = Field(..., min_length=1)
+    question: str = Field(..., min_length=1)
+    top_k: int = Field(default=5, gt=0)
+    include_tests: bool = True
+
+
+class AskSourceInfo(BaseModel):
+    chunk_id: str
+    file_path: str
+    start_line: int
+    end_line: int
+    score: float
+    source_type: str
+
+
+class AskResponse(BaseModel):
+    index_id: str
+    question: str
+    answer: str
+    sources: list[AskSourceInfo]

@@ -333,3 +333,136 @@ def test_search_repository_returns_422_for_invalid_top_k(
     )
 
     assert response.status_code == 422
+
+
+def test_ask_repository_endpoint(api_client: TestClient, tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    app_dir = repo / "app"
+    tests_dir = repo / "tests"
+    app_dir.mkdir()
+    tests_dir.mkdir()
+    (app_dir / "chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+    (tests_dir / "test_chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    response = api_client.post(
+        "/repositories/ask",
+        json={
+            "index_id": index_id,
+            "question": "Where is the chunking logic implemented?",
+            "top_k": 1,
+            "include_tests": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["index_id"] == index_id
+    assert "app/chunking.py" in payload["answer"]
+    assert len(payload["sources"]) == 1
+    assert payload["sources"][0]["source_type"] == "source"
+    assert payload["sources"][0]["file_path"] == "app/chunking.py"
+
+
+def test_ask_repository_excludes_test_sources(api_client: TestClient, tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    app_dir = repo / "app"
+    tests_dir = repo / "tests"
+    app_dir.mkdir()
+    tests_dir.mkdir()
+    (app_dir / "chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+    (tests_dir / "test_chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    response = api_client.post(
+        "/repositories/ask",
+        json={
+            "index_id": index_id,
+            "question": "Where is the chunking logic implemented?",
+            "top_k": 5,
+            "include_tests": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert all(source["source_type"] != "test" for source in payload["sources"])
+
+
+def test_ask_repository_returns_insufficient_context_without_sources(
+    api_client: TestClient,
+    tmp_path: Path,
+):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    tests_dir = repo / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    response = api_client.post(
+        "/repositories/ask",
+        json={
+            "index_id": index_id,
+            "question": "Where is the chunking logic implemented?",
+            "top_k": 1,
+            "include_tests": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "not enough context" in payload["answer"].lower()
+    assert payload["sources"] == []
+
+
+def test_ask_repository_returns_404_for_missing_index(api_client: TestClient):
+    response = api_client.post(
+        "/repositories/ask",
+        json={
+            "index_id": "missing-index-id",
+            "question": "Where is the chunking logic implemented?",
+            "top_k": 1,
+        },
+    )
+
+    assert response.status_code == 404
+    assert "Index not found" in response.json()["detail"]
+
+
+def test_ask_repository_returns_422_for_empty_question(
+    api_client: TestClient,
+    tmp_path: Path,
+):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("chunk logic\n", encoding="utf-8")
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    response = api_client.post(
+        "/repositories/ask",
+        json={
+            "index_id": index_id,
+            "question": "",
+            "top_k": 1,
+        },
+    )
+
+    assert response.status_code == 422
