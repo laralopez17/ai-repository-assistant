@@ -84,6 +84,7 @@ class RepositoryIndex:
     repository_path: str
     total_chunks_indexed: int
     embedding_model: str
+    created_at: str
 
 
 @dataclass(frozen=True)

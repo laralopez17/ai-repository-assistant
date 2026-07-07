@@ -16,7 +16,7 @@ Backend service that scans local code repositories, chunks readable content, and
 ## Milestone 3
 
 - OpenAI and Gemini embedding providers behind a shared abstraction
-- In-memory vector store with cosine similarity search
+- Semantic search with cosine similarity
 - `POST /repositories/index` and `POST /repositories/search` endpoints
 - `source_type` metadata and `include_tests` filtering
 
@@ -25,6 +25,20 @@ Backend service that scans local code repositories, chunks readable content, and
 - `LLMProvider` abstraction with OpenAI, Gemini, and fake providers
 - `RAGAnswerService` for retrieval + grounded answer generation
 - `POST /repositories/ask` endpoint with citations
+
+## Milestone 5
+
+- SQLite persistence via `SQLiteIndexStore` (single source of truth)
+- Index management: `GET /repositories/indexes`, `GET /repositories/indexes/{id}`, `DELETE /repositories/indexes/{id}`
+- Indexes survive API restarts
+
+Configure persistence:
+
+```env
+SQLITE_DB_PATH=./data/ai_repository_assistant.db
+```
+
+The `data/` directory and `*.db` files are gitignored. Do not commit local database files.
 
 No agents, external vector DB, or GitHub integration yet.
 
@@ -164,7 +178,19 @@ Request:
 }
 ```
 
-Response includes `index_id`, `repository_path`, `total_chunks_indexed`, and `embedding_model`.
+Response includes `index_id`, `repository_path`, `total_chunks_indexed`, and `embedding_model`. Data is persisted to SQLite and survives API restarts.
+
+### `GET /repositories/indexes`
+
+Lists persisted repository indexes.
+
+### `GET /repositories/indexes/{index_id}`
+
+Returns metadata for one persisted index.
+
+### `DELETE /repositories/indexes/{index_id}`
+
+Deletes an index and its chunks from SQLite.
 
 ### `POST /repositories/search`
 

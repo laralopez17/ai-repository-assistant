@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.core.config import SQLITE_DB_PATH
+from app.core.database import init_database
 from app.core.errors import (
     AppError,
     ChunkLimitExceededError,
+    DatabaseError,
     EmbeddingProviderError,
     IndexNotFoundError,
     InvalidChunkingConfigError,
@@ -20,7 +23,10 @@ from app.schemas.repository import (
     ChunkInfo,
     ChunkRequest,
     ChunksResponse,
+    DeleteIndexResponse,
     FileInfo,
+    IndexListResponse,
+    IndexMetadata,
     IndexRequest,
     IndexResponse,
     LanguageInfo,
@@ -35,17 +41,19 @@ from app.services.chunking_service import ChunkingService
 from app.services.content_extractor import ContentExtractor
 from app.services.embedding_factory import get_embedding_provider
 from app.services.embedding_provider import EmbeddingProvider
+from app.services.index_store import IndexStore
 from app.services.llm_provider_factory import get_llm_provider
 from app.services.llm_provider import LLMProvider
 from app.services.rag_answer_service import RAGAnswerService
 from app.services.repository_indexer import RepositoryIndexer
 from app.services.repository_scanner import RepositoryScanner
 from app.services.semantic_search_service import SemanticSearchService
-from app.services.vector_store import VectorStore
+from app.services.sqlite_index_store import SQLiteIndexStore
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
-_vector_store = VectorStore()
+_index_store = SQLiteIndexStore(SQLITE_DB_PATH)
+init_database(SQLITE_DB_PATH)
 
 
 def get_repository_scanner() -> RepositoryScanner:
@@ -60,8 +68,8 @@ def get_chunking_service() -> ChunkingService:
     return ChunkingService()
 
 
-def get_vector_store() -> VectorStore:
-    return _vector_store
+def get_index_store() -> IndexStore:
+    return _index_store
 
 
 def get_repository_indexer(
@@ -69,24 +77,24 @@ def get_repository_indexer(
     content_extractor: ContentExtractor = Depends(get_content_extractor),
     chunking_service: ChunkingService = Depends(get_chunking_service),
     embedding_provider: EmbeddingProvider = Depends(get_embedding_provider),
-    vector_store: VectorStore = Depends(get_vector_store),
+    index_store: IndexStore = Depends(get_index_store),
 ) -> RepositoryIndexer:
     return RepositoryIndexer(
         scanner=scanner,
         content_extractor=content_extractor,
         chunking_service=chunking_service,
         embedding_provider=embedding_provider,
-        vector_store=vector_store,
+        index_store=index_store,
     )
 
 
 def get_semantic_search_service(
     embedding_provider: EmbeddingProvider = Depends(get_embedding_provider),
-    vector_store: VectorStore = Depends(get_vector_store),
+    index_store: IndexStore = Depends(get_index_store),
 ) -> SemanticSearchService:
     return SemanticSearchService(
         embedding_provider=embedding_provider,
-        vector_store=vector_store,
+        index_store=index_store,
     )
 
 
@@ -97,6 +105,16 @@ def get_rag_answer_service(
     return RAGAnswerService(
         semantic_search_service=semantic_search_service,
         llm_provider=llm_provider,
+    )
+
+
+def _to_index_metadata(repository_index) -> IndexMetadata:
+    return IndexMetadata(
+        index_id=repository_index.index_id,
+        repository_path=repository_index.repository_path,
+        embedding_model=repository_index.embedding_model,
+        total_chunks_indexed=repository_index.total_chunks_indexed,
+        created_at=repository_index.created_at,
     )
 
 
@@ -189,6 +207,11 @@ def _map_repository_errors(error: AppError) -> HTTPException:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error.message,
         )
+    if isinstance(error, DatabaseError):
+        return HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error.message,
+        )
     if isinstance(error, UnsupportedProviderError):
         return HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -271,6 +294,46 @@ def index_repository(
         total_chunks_indexed=repository_index.total_chunks_indexed,
         embedding_model=repository_index.embedding_model,
     )
+
+
+@router.get("/indexes", response_model=IndexListResponse)
+def list_repository_indexes(
+    index_store: IndexStore = Depends(get_index_store),
+) -> IndexListResponse:
+    try:
+        indexes = index_store.list_indexes()
+    except AppError as error:
+        raise _map_repository_errors(error) from error
+
+    return IndexListResponse(
+        indexes=[_to_index_metadata(repository_index) for repository_index in indexes]
+    )
+
+
+@router.get("/indexes/{index_id}", response_model=IndexMetadata)
+def get_repository_index(
+    index_id: str,
+    index_store: IndexStore = Depends(get_index_store),
+) -> IndexMetadata:
+    try:
+        repository_index = index_store.get_index(index_id)
+    except AppError as error:
+        raise _map_repository_errors(error) from error
+
+    return _to_index_metadata(repository_index)
+
+
+@router.delete("/indexes/{index_id}", response_model=DeleteIndexResponse)
+def delete_repository_index(
+    index_id: str,
+    index_store: IndexStore = Depends(get_index_store),
+) -> DeleteIndexResponse:
+    try:
+        index_store.delete_index(index_id)
+    except AppError as error:
+        raise _map_repository_errors(error) from error
+
+    return DeleteIndexResponse(deleted=True, index_id=index_id)
 
 
 @router.post("/search", response_model=SearchResponse)

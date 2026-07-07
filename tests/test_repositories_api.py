@@ -466,3 +466,109 @@ def test_ask_repository_returns_422_for_empty_question(
     )
 
     assert response.status_code == 422
+
+
+def test_list_repository_indexes_endpoint(api_client: TestClient, tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("chunk logic\n", encoding="utf-8")
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    response = api_client.get("/repositories/indexes")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["indexes"]) == 1
+    assert payload["indexes"][0]["index_id"] == index_id
+    assert payload["indexes"][0]["created_at"]
+
+
+def test_get_repository_index_endpoint(api_client: TestClient, tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("chunk logic\n", encoding="utf-8")
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    response = api_client.get(f"/repositories/indexes/{index_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["index_id"] == index_id
+    assert payload["total_chunks_indexed"] == 1
+
+
+def test_delete_repository_index_endpoint(api_client: TestClient, tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("chunk logic\n", encoding="utf-8")
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    delete_response = api_client.delete(f"/repositories/indexes/{index_id}")
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"deleted": True, "index_id": index_id}
+
+    get_response = api_client.get(f"/repositories/indexes/{index_id}")
+    assert get_response.status_code == 404
+
+
+def test_search_works_with_persisted_index(api_client: TestClient, tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    app_dir = repo / "app"
+    app_dir.mkdir()
+    (app_dir / "chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    response = api_client.post(
+        "/repositories/search",
+        json={
+            "index_id": index_id,
+            "query": "Where is the chunking logic implemented?",
+            "top_k": 1,
+            "include_tests": False,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["results"][0]["file_path"] == "app/chunking.py"
+
+
+def test_ask_works_with_persisted_index(api_client: TestClient, tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    app_dir = repo / "app"
+    app_dir.mkdir()
+    (app_dir / "chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+
+    index_id = api_client.post(
+        "/repositories/index",
+        json={"path": str(repo)},
+    ).json()["index_id"]
+
+    response = api_client.post(
+        "/repositories/ask",
+        json={
+            "index_id": index_id,
+            "question": "Where is the chunking logic implemented?",
+            "top_k": 1,
+            "include_tests": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "app/chunking.py" in payload["answer"]
+    assert payload["sources"][0]["file_path"] == "app/chunking.py"

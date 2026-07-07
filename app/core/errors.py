@@ -39,3 +39,7 @@ class LLMProviderError(AppError):
 
 class ChunkLimitExceededError(AppError):
     pass
+
+
+class DatabaseError(AppError):
+    pass

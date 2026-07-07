@@ -82,6 +82,23 @@ class IndexResponse(BaseModel):
     embedding_model: str
 
 
+class IndexMetadata(BaseModel):
+    index_id: str
+    repository_path: str
+    embedding_model: str
+    total_chunks_indexed: int
+    created_at: str
+
+
+class IndexListResponse(BaseModel):
+    indexes: list[IndexMetadata]
+
+
+class DeleteIndexResponse(BaseModel):
+    deleted: bool
+    index_id: str
+
+
 class SearchRequest(BaseModel):
     index_id: str = Field(..., min_length=1)
     query: str = Field(..., min_length=1)

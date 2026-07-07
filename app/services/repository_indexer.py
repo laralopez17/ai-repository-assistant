@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from app.core import config
 from app.core.errors import ChunkLimitExceededError
@@ -6,8 +7,8 @@ from app.domain.models import ContentChunk, EmbeddedChunk, RepositoryIndex
 from app.services.chunking_service import ChunkingService
 from app.services.content_extractor import ContentExtractor
 from app.services.embedding_provider import EmbeddingProvider
+from app.services.index_store import IndexStore
 from app.services.repository_scanner import RepositoryScanner
-from app.services.vector_store import VectorStore
 
 
 class RepositoryIndexer:
@@ -17,14 +18,14 @@ class RepositoryIndexer:
         content_extractor: ContentExtractor,
         chunking_service: ChunkingService,
         embedding_provider: EmbeddingProvider,
-        vector_store: VectorStore,
+        index_store: IndexStore,
         max_chunks_to_embed: int | None = None,
     ) -> None:
         self._scanner = scanner
         self._content_extractor = content_extractor
         self._chunking_service = chunking_service
         self._embedding_provider = embedding_provider
-        self._vector_store = vector_store
+        self._index_store = index_store
         self._max_chunks_to_embed = (
             max_chunks_to_embed
             if max_chunks_to_embed is not None
@@ -66,14 +67,14 @@ class RepositoryIndexer:
             for chunk, embedding in zip(chunks, embeddings, strict=True)
         ]
 
-        index_id = str(uuid.uuid4())
         repository_index = RepositoryIndex(
-            index_id=index_id,
+            index_id=str(uuid.uuid4()),
             repository_path=scan_result.repository_path,
             total_chunks_indexed=len(embedded_chunks),
             embedding_model=self._embedding_provider.model_name,
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
-        self._vector_store.store_index(repository_index, embedded_chunks)
+        self._index_store.store_index(repository_index, embedded_chunks)
         return repository_index
 
     def _to_embedded_chunk(

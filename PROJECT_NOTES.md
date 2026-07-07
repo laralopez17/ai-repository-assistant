@@ -10,19 +10,20 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Current Milestone
 
-### Milestone 4 — RAG Answering with Citations (completed)
+### Milestone 5 — SQLite Persistence + Index Management (implemented; pending manual verification)
 
-Implemented on top of Milestones 1–3:
+Implemented on top of Milestones 1–4:
 
-- `LLMProvider` abstraction with OpenAI, Gemini, and fake providers
-- `RAGAnswerService` orchestrating semantic search + grounded answer generation
-- `POST /repositories/ask` endpoint returning answer + source citations
-- Prompt construction in `rag_prompt.py` for real LLM providers
-- Tests use fake providers only; no external API calls in CI
+- `IndexStore` protocol with `SQLiteIndexStore` as the single source of truth
+- SQLite schema for `indexes` and `chunks` with cascade delete
+- Embeddings stored as JSON; cosine similarity in `app/utils/similarity.py`
+- Index management endpoints: list, get, delete
+- `/repositories/search` and `/repositories/ask` read from SQLite after restart
+- Tests use temporary SQLite files only
 
-Still excluded: agents, tool calling, MCP, Docker, external vector DB, persistence.
+Intentionally deferred: in-memory cache, ORM, Postgres/pgvector.
 
-### Milestone 3 — Completed
+### Milestone 4 — Completed
 
 Implemented the FastAPI backend foundation with:
 
@@ -88,12 +89,12 @@ Never commit `.env` files. Treat repository scanning as untrusted input when poi
 
 - `RepositoryScanner` is injected via FastAPI `Depends` in the scan route to keep routes testable and swappable later.
 
-### What we intentionally avoided
+### What we intentionally avoided (historical / still out of scope)
 
-- No database (scan results are ephemeral).
 - No GitHub API (local paths first).
-- No LLM/RAG/agents yet.
-- No Docker yet.
+- No agents or MCP in v1.
+- No Docker yet (planned for v1 polish).
+- No in-memory cache in M5.
 
 ## Learning Goals
 
@@ -120,13 +121,20 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 
 `MAX_CHUNKS_TO_EMBED` (default `50`) is checked in `RepositoryIndexer` before calling the embedding provider. Repositories exceeding this limit return `400` without incurring API cost.
 
-### Vector store
+### SQLite persistence
 
-- In-memory store keyed by `index_id`.
-- Cosine similarity via numpy; results sorted by descending score.
-- Chunks carry `source_type` metadata (`source`, `test`, `docs`, `config`, `other`).
-- Search accepts `include_tests` (default `true`) to filter out test chunks after similarity ranking.
-- No persistence yet; indexes live for the process lifetime.
+- `SQLITE_DB_PATH` (default `./data/ai_repository_assistant.db`) is the single source of truth.
+- `RepositoryIndexer` and `SemanticSearchService` depend on the `IndexStore` protocol, not SQLite directly.
+- `SQLiteIndexStore.search()` loads chunks from disk, computes cosine similarity in Python, filters `include_tests`, ranks, and returns `top_k`.
+- Raises `IndexNotFoundError` before returning empty results when the index does not exist.
+- `created_at` uses timezone-aware UTC ISO timestamps.
+- `data/` and `*.db` files are gitignored.
+
+### Future performance work (deferred)
+
+- In-memory cache in front of SQLite for hot indexes
+- Postgres + pgvector if scale requires it
+- Incremental reindexing
 
 ### RAG answering
 
@@ -136,9 +144,42 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 - Sources are returned separately from the answer (metadata only, no chunk body in citations).
 - If retrieval returns no chunks, the service answers with a safe insufficient-context message without calling the LLM.
 
-## Next Steps (Milestone 5+)
+## Next Steps (post-M5 / v1 polish)
 
-1. Add persistence for indexes and conversation history.
-2. Integrate GitHub API for remote repository ingestion.
-3. Add Docker and deployment configuration.
-4. Introduce agent orchestration once basic RAG is stable.
+1. Docker and developer setup documentation
+2. Manual demo flow verification end-to-end
+3. Integrate GitHub API for remote repository ingestion (future)
+4. Introduce agent orchestration only after v1 is stable (future)
+
+### Project Scope Rule
+
+This project must reach a clear product-complete v1 instead of becoming an endless experiment.
+
+The goal is to build a complete backend-first AI repository assistant with a defined finish line. Future scalability is important, but advanced ideas should be documented as future improvements unless they are part of the current milestone scope.
+
+### Product-complete v1 target
+
+The project is considered complete for portfolio v1 when it includes:
+
+- FastAPI backend foundation
+- Local repository scanning
+- Sensitive file exclusion
+- Content extraction and chunking
+- Embedding provider abstraction
+- Semantic search
+- RAG answering with citations
+- SQLite persistence and index management
+- Docker/developer setup
+- A clear demo flow
+- Professional README, architecture notes and future improvements
+
+Out of scope for v1 unless explicitly promoted later:
+
+- Multi-user authentication
+- Cloud deployment
+- Advanced agents
+- MCP integration
+- Full UI
+- Postgres/pgvector migration
+- In-memory cache optimization
+- Incremental reindexing

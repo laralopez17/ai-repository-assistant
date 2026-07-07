@@ -1,7 +1,19 @@
+from datetime import datetime, timezone
+
 from app.domain.models import EmbeddedChunk, RepositoryIndex
 from app.services.fake_embedding_provider import FakeEmbeddingProvider
 from app.services.semantic_search_service import SemanticSearchService
-from app.services.vector_store import VectorStore
+from app.services.sqlite_index_store import SQLiteIndexStore
+
+
+def _repository_index() -> RepositoryIndex:
+    return RepositoryIndex(
+        index_id="index-1",
+        repository_path="/repo",
+        total_chunks_indexed=3,
+        embedding_model="fake-embedding-model",
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
 
 
 def _embedded_chunk(
@@ -23,16 +35,9 @@ def _embedded_chunk(
     )
 
 
-def test_semantic_search_returns_relevant_chunk():
-    vector_store = VectorStore()
-    repository_index = RepositoryIndex(
-        index_id="index-1",
-        repository_path="/repo",
-        total_chunks_indexed=3,
-        embedding_model="fake-embedding-model",
-    )
-    vector_store.store_index(
-        repository_index,
+def test_semantic_search_returns_relevant_chunk(index_store):
+    index_store.store_index(
+        _repository_index(),
         [
             _embedded_chunk(
                 "scanner",
@@ -60,7 +65,7 @@ def test_semantic_search_returns_relevant_chunk():
 
     service = SemanticSearchService(
         embedding_provider=FakeEmbeddingProvider(),
-        vector_store=vector_store,
+        index_store=index_store,
     )
     results = service.search("index-1", "Where is the chunking logic implemented?", top_k=1)
 
@@ -70,16 +75,15 @@ def test_semantic_search_returns_relevant_chunk():
     assert results[0].score == 1.0
 
 
-def test_semantic_search_excludes_tests_when_requested():
-    vector_store = VectorStore()
-    repository_index = RepositoryIndex(
-        index_id="index-1",
-        repository_path="/repo",
-        total_chunks_indexed=2,
-        embedding_model="fake-embedding-model",
-    )
-    vector_store.store_index(
-        repository_index,
+def test_semantic_search_excludes_tests_when_requested(index_store):
+    index_store.store_index(
+        RepositoryIndex(
+            index_id="index-1",
+            repository_path="/repo",
+            total_chunks_indexed=2,
+            embedding_model="fake-embedding-model",
+            created_at=datetime.now(timezone.utc).isoformat(),
+        ),
         [
             _embedded_chunk(
                 "test-chunk",
@@ -100,7 +104,7 @@ def test_semantic_search_excludes_tests_when_requested():
 
     service = SemanticSearchService(
         embedding_provider=FakeEmbeddingProvider(),
-        vector_store=vector_store,
+        index_store=index_store,
     )
 
     with_tests = service.search(
