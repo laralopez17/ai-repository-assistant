@@ -111,18 +111,18 @@ In all cases, index with:
 
 Copy `.env.example` to `.env`. Never commit `.env`.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `EMBEDDING_PROVIDER` | `openai` in code; `fake` in `.env.example` | `fake`, `openai`, or `gemini` |
-| `LLM_PROVIDER` | `openai` in code; `fake` in `.env.example` | `fake`, `openai`, or `gemini` |
-| `MAX_CHUNKS_TO_EMBED` | `50` | Safety cap before embedding API calls |
-| `SQLITE_DB_PATH` | `./data/ai_repository_assistant.db` locally | SQLite file path; overridden to `/app/data/ai_repository_assistant.db` in Docker Compose |
-| `OPENAI_API_KEY` | empty | Required when using OpenAI providers |
-| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI embedding model |
-| `OPENAI_CHAT_MODEL` | `gpt-4.1-mini` | OpenAI chat model |
-| `GEMINI_API_KEY` | empty | Required when using Gemini providers |
-| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001` | Gemini embedding model |
-| `GEMINI_CHAT_MODEL` | `gemini-2.0-flash` | Gemini chat model |
+| Variable                 | Default                                     | Description                                                                              |
+| ------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `EMBEDDING_PROVIDER`     | `openai` in code; `fake` in `.env.example`  | `fake`, `openai`, or `gemini`                                                            |
+| `LLM_PROVIDER`           | `openai` in code; `fake` in `.env.example`  | `fake`, `openai`, or `gemini`                                                            |
+| `MAX_CHUNKS_TO_EMBED`    | `50`                                        | Safety cap before embedding API calls                                                    |
+| `SQLITE_DB_PATH`         | `./data/ai_repository_assistant.db` locally | SQLite file path; overridden to `/app/data/ai_repository_assistant.db` in Docker Compose |
+| `OPENAI_API_KEY`         | empty                                       | Required when using OpenAI providers                                                     |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small`                    | OpenAI embedding model                                                                   |
+| `OPENAI_CHAT_MODEL`      | `gpt-4.1-mini`                              | OpenAI chat model                                                                        |
+| `GEMINI_API_KEY`         | empty                                       | Required when using Gemini providers                                                     |
+| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001`                      | Gemini embedding model                                                                   |
+| `GEMINI_CHAT_MODEL`      | `gemini-2.0-flash`                          | Gemini chat model                                                                        |
 
 ### Local development without paid API keys
 
@@ -270,18 +270,18 @@ Cloned repositories are treated as untrusted input. Sensitive files (`.env`, key
 
 ## API endpoints
 
-| Method | Path | Description |
-| --- | --- | --- |
-| `GET` | `/health` | Service health |
-| `POST` | `/repositories/scan` | Scan repository metadata |
-| `POST` | `/repositories/chunks` | Extract and chunk files |
-| `POST` | `/repositories/index` | Index local repository chunks |
-| `POST` | `/repositories/index-github` | Index public GitHub repository by URL |
-| `POST` | `/repositories/search` | Semantic search |
-| `POST` | `/repositories/ask` | RAG answer with citations |
-| `GET` | `/repositories/indexes` | List persisted indexes |
-| `GET` | `/repositories/indexes/{index_id}` | Get index metadata |
-| `DELETE` | `/repositories/indexes/{index_id}` | Delete index and chunks |
+| Method   | Path                               | Description                           |
+| -------- | ---------------------------------- | ------------------------------------- |
+| `GET`    | `/health`                          | Service health                        |
+| `POST`   | `/repositories/scan`               | Scan repository metadata              |
+| `POST`   | `/repositories/chunks`             | Extract and chunk files               |
+| `POST`   | `/repositories/index`              | Index local repository chunks         |
+| `POST`   | `/repositories/index-github`       | Index public GitHub repository by URL |
+| `POST`   | `/repositories/search`             | Semantic search                       |
+| `POST`   | `/repositories/ask`                | RAG answer with citations             |
+| `GET`    | `/repositories/indexes`            | List persisted indexes                |
+| `GET`    | `/repositories/indexes/{index_id}` | Get index metadata                    |
+| `DELETE` | `/repositories/indexes/{index_id}` | Delete index and chunks               |
 
 Interactive docs: `http://127.0.0.1:8000/docs`
 
@@ -321,7 +321,7 @@ docker-compose.yml
 - **M4:** LLM providers, RAG answering with citations
 - **M5:** SQLite persistence and index management
 - **M6:** Docker and developer experience
-- **M7:** GitHub ingestion for public repositories (this milestone)
+- **M7:** GitHub ingestion for public repositories
 
 ## Next steps
 

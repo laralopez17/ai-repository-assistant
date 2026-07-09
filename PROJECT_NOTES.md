@@ -10,7 +10,7 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Milestones
 
-### Milestone 7 — GitHub Ingestion for Public Repositories (implemented; pending manual verification)
+### Milestone 7 — GitHub Ingestion for Public Repositories (completed)
 
 **Problem GitHub ingestion solves:** Users should be able to index a public repository from a URL without manually cloning it first. M7 adds a new ingestion source while keeping the same processing pipeline and SQLite persistence.
 
