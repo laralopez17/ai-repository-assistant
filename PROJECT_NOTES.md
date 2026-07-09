@@ -10,6 +10,34 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Milestones
 
+### Milestone 7 — GitHub Ingestion for Public Repositories (implemented; pending manual verification)
+
+**Problem GitHub ingestion solves:** Users should be able to index a public repository from a URL without manually cloning it first. M7 adds a new ingestion source while keeping the same processing pipeline and SQLite persistence.
+
+**Added:**
+
+- `POST /repositories/index-github` for public `https://github.com/owner/repo` URLs
+- `GitHubRepositoryIngestor` cloning with `git clone --depth 1` via `subprocess.run` (no `shell=True`)
+- URL validation in `app/utils/github_url.py` (HTTPS, `github.com` only, owner/repo path)
+- Temporary clone directory with automatic cleanup after indexing
+- Reuses `RepositoryIndexer` → `SQLiteIndexStore` (no duplicated scan/chunk/embed logic)
+- `git` installed in Docker image
+- Tests mock clone operations; no real GitHub network calls in CI
+
+**Why reuse the existing pipeline:** Ingestion source differs (local path vs GitHub URL), but scan, chunk, embed, persist, search, and ask are identical. A separate pipeline would duplicate logic and drift from local behavior.
+
+**Security considerations:**
+
+- Cloned repos are untrusted; files are read, never executed
+- HTTPS GitHub URLs only; credentials in URLs rejected
+- Sensitive file exclusion remains active during indexing
+- No GitHub tokens, OAuth, or private repo support in M7
+- Clone timeout (60s) and clear error mapping (400/404/500/504)
+
+**Out of scope for M7:** private repos, GitHub tokens, GitHub App, PRs, issues, agents, permanent clone cache.
+
+**Future improvements (deferred):** private repository support, GitHub token auth, GitHub App integration, rate limit handling, repository size limits, branch selection, incremental re-indexing, clone cache, webhook-based reindexing.
+
 ### Milestone 6 — Docker + Developer Experience (completed)
 
 **Problem Docker solves:** New contributors should not need to guess Python version, virtualenv steps, or dependency installs. Docker provides a reproducible local runtime with the same FastAPI app, env-driven providers, and persisted SQLite indexes.
@@ -101,7 +129,7 @@ Initial FastAPI backend:
 
 ## Current Milestone
 
-Milestone 6 is complete. v1 portfolio polish: verify the full demo flow end-to-end and treat remaining items in **Next Steps** as future work unless promoted.
+Milestone 7 is implemented. Manual verification: index a real public GitHub repo via Docker or local API, then search/ask with the returned `index_id`.
 
 ## Tech Stack
 
@@ -188,7 +216,7 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 
 ### Docker (local development)
 
-- `Dockerfile` builds a Python 3.11 image with `requirements.txt` dependencies.
+- `Dockerfile` builds a Python 3.11 image with `requirements.txt` dependencies and `git` for GitHub ingestion.
 - `docker-compose.yml` runs the API on port 8000, loads `.env`, and overrides `SQLITE_DB_PATH` to `/app/data/ai_repository_assistant.db` (even if `.env` uses a local relative path).
 - Host `./data` is bind-mounted to `/app/data`; indexes persist across container restarts as long as `./data` is kept on the host.
 - `${REPO_MOUNT_SOURCE:-.}:/workspace:ro` mounts a repository read-only at `/workspace`; set `REPO_MOUNT_SOURCE` to index a different repo, always using `{"path": "/workspace"}` in API requests.
@@ -210,6 +238,12 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 - Postgres + pgvector if scale requires it
 - Incremental reindexing
 
+### GitHub ingestion
+
+- `GitHubRepositoryIngestor` validates URL, clones to `tempfile.TemporaryDirectory`, calls `RepositoryIndexer`, cleans up clone.
+- `repository_path` in the index reflects the temporary clone path at index time; search/ask use persisted chunks in SQLite.
+- Local path ingestion via `POST /repositories/index` is unchanged.
+
 ### RAG answering
 
 - `/repositories/search` returns ranked chunks only.
@@ -218,11 +252,12 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 - Sources are returned separately from the answer (metadata only, no chunk body in citations).
 - If retrieval returns no chunks, the service answers with a safe insufficient-context message without calling the LLM.
 
-## Next Steps (post-v1)
+## Next Steps (post-M7)
 
-1. Integrate GitHub API for remote repository ingestion (future)
-2. Introduce agent orchestration only after v1 is stable (future)
-3. Production deployment patterns (hosting, secrets, observability) when scope expands beyond portfolio v1
+1. Manual GitHub ingestion verification with a real public repository
+2. Mark v1 portfolio-complete after local + Docker + GitHub demo flows are verified
+3. Private repo / GitHub token support (future)
+4. Agent orchestration and GitHub API expansion (future)
 
 ### Project Scope Rule
 

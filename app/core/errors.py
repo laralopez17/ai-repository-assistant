@@ -43,3 +43,23 @@ class ChunkLimitExceededError(AppError):
 
 class DatabaseError(AppError):
     pass
+
+
+class InvalidGitHubUrlError(AppError):
+    pass
+
+
+class GitHubRepositoryNotFoundError(AppError):
+    pass
+
+
+class GitCloneError(AppError):
+    pass
+
+
+class GitCloneTimeoutError(AppError):
+    pass
+
+
+class GitNotInstalledError(AppError):
+    pass

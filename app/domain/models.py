@@ -109,6 +109,16 @@ class SourceCitation:
 
 
 @dataclass(frozen=True)
+class GitHubIndexResult:
+    index_id: str
+    repository_path: str
+    total_chunks_indexed: int
+    embedding_model: str
+    github_url: str
+    source: str = "github"
+
+
+@dataclass(frozen=True)
 class RAGAnswerResult:
     index_id: str
     question: str

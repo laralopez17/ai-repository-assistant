@@ -82,6 +82,19 @@ class IndexResponse(BaseModel):
     embedding_model: str
 
 
+class GitHubRepositoryIndexRequest(BaseModel):
+    url: str = Field(..., min_length=1)
+
+
+class GitHubRepositoryIndexResponse(BaseModel):
+    index_id: str
+    repository_path: str
+    total_chunks_indexed: int
+    embedding_model: str
+    source: str
+    github_url: str
+
+
 class IndexMetadata(BaseModel):
     index_id: str
     repository_path: str

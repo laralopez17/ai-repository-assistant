@@ -238,6 +238,36 @@ curl http://127.0.0.1:8000/health
 
 Run the index → search → ask → list flow above with `{"path": "/workspace"}`. Restart the container and confirm the same `index_id` still works while `./data` remains on the host.
 
+## GitHub ingestion (public repositories)
+
+Index a **public** GitHub repository by URL. The app clones the repo into a temporary directory, runs the same scan → chunk → embed → persist pipeline as local indexing, then deletes the clone. The persisted artifact is the SQLite index, not the cloned repository.
+
+**Scope:** public `https://github.com/owner/repo` URLs only. Private repos, OAuth, GitHub App, PRs, issues, and agents are out of scope.
+
+**Requirements:** `git` must be installed on the host for local runs. The Docker image includes `git`.
+
+### Index a GitHub repository
+
+```bash
+curl -X POST http://127.0.0.1:8000/repositories/index-github -H "Content-Type: application/json" -d '{"url": "https://github.com/owner/repo"}'
+```
+
+Response includes `source: "github"` and `github_url` in addition to the standard index fields.
+
+### Search and ask after GitHub indexing
+
+Use the returned `index_id` with the existing endpoints (unchanged):
+
+```bash
+curl -X POST http://127.0.0.1:8000/repositories/search -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "query": "How does authentication work?", "top_k": 3, "include_tests": false}'
+```
+
+```bash
+curl -X POST http://127.0.0.1:8000/repositories/ask -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "question": "How does authentication work?", "top_k": 3, "include_tests": false}'
+```
+
+Cloned repositories are treated as untrusted input. Sensitive files (`.env`, keys, etc.) are still excluded during scanning. No code from the repository is executed.
+
 ## API endpoints
 
 | Method | Path | Description |
@@ -245,7 +275,8 @@ Run the index → search → ask → list flow above with `{"path": "/workspace"
 | `GET` | `/health` | Service health |
 | `POST` | `/repositories/scan` | Scan repository metadata |
 | `POST` | `/repositories/chunks` | Extract and chunk files |
-| `POST` | `/repositories/index` | Index repository chunks |
+| `POST` | `/repositories/index` | Index local repository chunks |
+| `POST` | `/repositories/index-github` | Index public GitHub repository by URL |
 | `POST` | `/repositories/search` | Semantic search |
 | `POST` | `/repositories/ask` | RAG answer with citations |
 | `GET` | `/repositories/indexes` | List persisted indexes |
@@ -289,7 +320,8 @@ docker-compose.yml
 - **M3:** Embedding providers, semantic search, `source_type`, `include_tests`
 - **M4:** LLM providers, RAG answering with citations
 - **M5:** SQLite persistence and index management
-- **M6:** Docker and developer experience (this milestone)
+- **M6:** Docker and developer experience
+- **M7:** GitHub ingestion for public repositories (this milestone)
 
 ## Next steps
 

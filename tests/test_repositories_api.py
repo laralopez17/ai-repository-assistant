@@ -1,13 +1,36 @@
 from pathlib import Path
+import subprocess
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.routes import repositories as repositories_routes
 from app.core.errors import EmbeddingProviderError
 from app.main import app
+from app.services.chunking_service import ChunkingService
+from app.services.content_extractor import ContentExtractor
 from app.services.embedding_factory import get_embedding_provider
+from app.services.fake_embedding_provider import FakeEmbeddingProvider
+from app.services.github_repository_ingestor import GitHubRepositoryIngestor
+from app.services.repository_indexer import RepositoryIndexer
+from app.services.repository_scanner import RepositoryScanner
+from app.services.sqlite_index_store import SQLiteIndexStore
 
 client = TestClient(app)
+
+
+def _github_ingestor_with_clone(
+    index_store: SQLiteIndexStore,
+    clone,
+) -> GitHubRepositoryIngestor:
+    repository_indexer = RepositoryIndexer(
+        scanner=RepositoryScanner(),
+        content_extractor=ContentExtractor(),
+        chunking_service=ChunkingService(),
+        embedding_provider=FakeEmbeddingProvider(),
+        index_store=index_store,
+    )
+    return GitHubRepositoryIngestor(repository_indexer, clone=clone)
 
 
 class QuotaFailingEmbeddingProvider:
@@ -572,3 +595,104 @@ def test_ask_works_with_persisted_index(api_client: TestClient, tmp_path: Path):
     payload = response.json()
     assert "app/chunking.py" in payload["answer"]
     assert payload["sources"][0]["file_path"] == "app/chunking.py"
+
+
+def test_index_github_endpoint(api_client: TestClient, index_store: SQLiteIndexStore):
+    def fake_clone(url: str, destination: Path, timeout: int) -> None:
+        destination.mkdir(parents=True)
+        (destination / "chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+
+    ingestor = _github_ingestor_with_clone(index_store, fake_clone)
+    app.dependency_overrides[repositories_routes.get_github_repository_ingestor] = (
+        lambda: ingestor
+    )
+
+    response = api_client.post(
+        "/repositories/index-github",
+        json={"url": "https://github.com/owner/repo"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "github"
+    assert payload["github_url"] == "https://github.com/owner/repo"
+    assert payload["total_chunks_indexed"] == 1
+    assert payload["index_id"]
+
+
+def test_index_github_returns_400_for_invalid_url(api_client: TestClient):
+    response = api_client.post(
+        "/repositories/index-github",
+        json={"url": "https://gitlab.com/owner/repo"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_index_github_returns_404_when_repository_not_found(
+    api_client: TestClient,
+    index_store: SQLiteIndexStore,
+):
+    def failing_clone(url: str, destination: Path, timeout: int) -> None:
+        raise subprocess.CalledProcessError(
+            returncode=128,
+            cmd=["git", "clone"],
+            stderr="remote: Repository not found.",
+        )
+
+    ingestor = _github_ingestor_with_clone(index_store, failing_clone)
+    app.dependency_overrides[repositories_routes.get_github_repository_ingestor] = (
+        lambda: ingestor
+    )
+
+    response = api_client.post(
+        "/repositories/index-github",
+        json={"url": "https://github.com/owner/missing"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_index_github_search_and_ask_flow(
+    api_client: TestClient,
+    index_store: SQLiteIndexStore,
+):
+    def fake_clone(url: str, destination: Path, timeout: int) -> None:
+        destination.mkdir(parents=True)
+        app_dir = destination / "app"
+        app_dir.mkdir()
+        (app_dir / "chunking.py").write_text("chunk logic here\n", encoding="utf-8")
+
+    ingestor = _github_ingestor_with_clone(index_store, fake_clone)
+    app.dependency_overrides[repositories_routes.get_github_repository_ingestor] = (
+        lambda: ingestor
+    )
+
+    index_id = api_client.post(
+        "/repositories/index-github",
+        json={"url": "https://github.com/owner/repo.git"},
+    ).json()["index_id"]
+
+    search_response = api_client.post(
+        "/repositories/search",
+        json={
+            "index_id": index_id,
+            "query": "Where is the chunking logic implemented?",
+            "top_k": 1,
+            "include_tests": False,
+        },
+    )
+    assert search_response.status_code == 200
+    assert search_response.json()["results"][0]["file_path"] == "app/chunking.py"
+
+    ask_response = api_client.post(
+        "/repositories/ask",
+        json={
+            "index_id": index_id,
+            "question": "Where is the chunking logic implemented?",
+            "top_k": 1,
+            "include_tests": False,
+        },
+    )
+    assert ask_response.status_code == 200
+    assert "app/chunking.py" in ask_response.json()["answer"]

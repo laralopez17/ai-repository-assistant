@@ -7,8 +7,13 @@ from app.core.errors import (
     ChunkLimitExceededError,
     DatabaseError,
     EmbeddingProviderError,
+    GitCloneError,
+    GitCloneTimeoutError,
+    GitHubRepositoryNotFoundError,
+    GitNotInstalledError,
     IndexNotFoundError,
     InvalidChunkingConfigError,
+    InvalidGitHubUrlError,
     LLMProviderError,
     MissingApiKeyError,
     NotADirectoryError,
@@ -25,6 +30,8 @@ from app.schemas.repository import (
     ChunksResponse,
     DeleteIndexResponse,
     FileInfo,
+    GitHubRepositoryIndexRequest,
+    GitHubRepositoryIndexResponse,
     IndexListResponse,
     IndexMetadata,
     IndexRequest,
@@ -41,6 +48,7 @@ from app.services.chunking_service import ChunkingService
 from app.services.content_extractor import ContentExtractor
 from app.services.embedding_factory import get_embedding_provider
 from app.services.embedding_provider import EmbeddingProvider
+from app.services.github_repository_ingestor import GitHubRepositoryIngestor
 from app.services.index_store import IndexStore
 from app.services.llm_provider_factory import get_llm_provider
 from app.services.llm_provider import LLMProvider
@@ -86,6 +94,12 @@ def get_repository_indexer(
         embedding_provider=embedding_provider,
         index_store=index_store,
     )
+
+
+def get_github_repository_ingestor(
+    repository_indexer: RepositoryIndexer = Depends(get_repository_indexer),
+) -> GitHubRepositoryIngestor:
+    return GitHubRepositoryIngestor(repository_indexer)
 
 
 def get_semantic_search_service(
@@ -217,6 +231,26 @@ def _map_repository_errors(error: AppError) -> HTTPException:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=error.message,
         )
+    if isinstance(error, InvalidGitHubUrlError):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error.message,
+        )
+    if isinstance(error, GitHubRepositoryNotFoundError):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=error.message,
+        )
+    if isinstance(error, GitCloneTimeoutError):
+        return HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=error.message,
+        )
+    if isinstance(error, (GitCloneError, GitNotInstalledError)):
+        return HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error.message,
+        )
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=error.message,
@@ -293,6 +327,31 @@ def index_repository(
         repository_path=repository_index.repository_path,
         total_chunks_indexed=repository_index.total_chunks_indexed,
         embedding_model=repository_index.embedding_model,
+    )
+
+
+@router.post("/index-github", response_model=GitHubRepositoryIndexResponse)
+def index_github_repository(
+    request: GitHubRepositoryIndexRequest,
+    github_ingestor: GitHubRepositoryIngestor = Depends(get_github_repository_ingestor),
+) -> GitHubRepositoryIndexResponse:
+    try:
+        result = github_ingestor.index_github_repository(request.url)
+    except AppError as error:
+        raise _map_repository_errors(error) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
+        ) from error
+
+    return GitHubRepositoryIndexResponse(
+        index_id=result.index_id,
+        repository_path=result.repository_path,
+        total_chunks_indexed=result.total_chunks_indexed,
+        embedding_model=result.embedding_model,
+        source=result.source,
+        github_url=result.github_url,
     )
 
 
