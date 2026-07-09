@@ -1,240 +1,270 @@
 # AI Repository Assistant
 
-Backend service that scans local code repositories, chunks readable content, and supports semantic search over indexed chunks. Built as the foundation for future RAG and agent-based analysis.
+Backend service that scans local code repositories, chunks readable content, indexes embeddings in SQLite, and answers questions with RAG and citations.
 
-## Milestone 1
+## What it does
 
-- FastAPI backend with health check and repository scan endpoints
-- Local filesystem scanning with ignored directories, sensitive file filtering, and binary/large file filtering
+- Scan a local repository path and summarize files, languages, and ignored paths
+- Extract readable source files and split them into overlapping chunks
+- Index chunks with embeddings (OpenAI, Gemini, or fake providers for local dev)
+- Search indexed content by semantic similarity
+- Ask questions grounded in retrieved chunks with source citations
+- Persist indexes in SQLite across API restarts
 
-## Milestone 2
+## Prerequisites
 
-- Content extraction from scanned repository files
-- Line-based chunking with overlap for future RAG indexing
-- `POST /repositories/chunks` endpoint with skipped-file traceability
+- Python 3.11+ (local setup)
+- Docker and Docker Compose (optional, for containerized local dev)
 
-## Milestone 3
+## Quickstart (local, no Docker)
 
-- OpenAI and Gemini embedding providers behind a shared abstraction
-- Semantic search with cosine similarity
-- `POST /repositories/index` and `POST /repositories/search` endpoints
-- `source_type` metadata and `include_tests` filtering
-
-## Milestone 4
-
-- `LLMProvider` abstraction with OpenAI, Gemini, and fake providers
-- `RAGAnswerService` for retrieval + grounded answer generation
-- `POST /repositories/ask` endpoint with citations
-
-## Milestone 5
-
-- SQLite persistence via `SQLiteIndexStore` (single source of truth)
-- Index management: `GET /repositories/indexes`, `GET /repositories/indexes/{id}`, `DELETE /repositories/indexes/{id}`
-- Indexes survive API restarts
-
-Configure persistence:
-
-```env
-SQLITE_DB_PATH=./data/ai_repository_assistant.db
-```
-
-The `data/` directory and `*.db` files are gitignored. Do not commit local database files.
-
-No agents, external vector DB, or GitHub integration yet.
-
-## Requirements
-
-- Python 3.11+
-- Dependencies listed in `requirements.txt`
-
-## Setup
+**Windows (PowerShell or cmd):**
 
 ```bash
+git clone <repository-url>
+cd ai-repository-assistant
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
+copy .env.example .env
+uvicorn app.main:app --reload
 ```
 
-### Local development (no external API calls)
+**macOS / Linux:**
 
-Use the fake embedding provider:
+```bash
+git clone <repository-url>
+cd ai-repository-assistant
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload
+```
+
+Open `http://127.0.0.1:8000/docs` for interactive API docs.
+
+## Quickstart (Docker)
+
+Docker is for **local development and reproducible execution**, not production deployment.
+
+**Windows:**
+
+```bash
+copy .env.example .env
+docker compose up --build
+```
+
+**macOS / Linux:**
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The API listens on `http://127.0.0.1:8000`.
+
+### SQLite persistence in Docker
+
+Your `.env` may set `SQLITE_DB_PATH=./data/ai_repository_assistant.db` for local runs. **Docker Compose intentionally overrides this** at runtime to `/app/data/ai_repository_assistant.db` inside the container.
+
+The host persists that file through the bind mount `./data:/app/data`:
+
+- **Inside the container:** `/app/data/ai_repository_assistant.db`
+- **On your machine:** `./data/ai_repository_assistant.db`
+
+Indexes survive `docker compose down` and container restarts **as long as you keep the local `./data` directory**. If you delete `./data`, persisted indexes are removed. The `data/` directory is gitignored — do not commit database files.
+
+### Indexing a repository inside Docker
+
+Repository paths in API requests must exist **inside the container**.
+
+`docker-compose.yml` mounts a repository at `/workspace` in **read-only** mode via:
+
+```yaml
+${REPO_MOUNT_SOURCE:-.}:/workspace:ro
+```
+
+- **Default:** the current project directory (`.`) is mounted at `/workspace`.
+- **Custom repository:**
+
+  Bash / macOS / Linux:
+
+  ```bash
+  REPO_MOUNT_SOURCE=/path/to/repo docker compose up --build
+  ```
+
+  Windows PowerShell:
+
+  ```powershell
+  $env:REPO_MOUNT_SOURCE="D:/projects/my-repo"
+  docker compose up --build
+  ```
+
+In all cases, index with:
+
+```json
+{ "path": "/workspace" }
+```
+
+## Environment variables
+
+Copy `.env.example` to `.env`. Never commit `.env`.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `EMBEDDING_PROVIDER` | `openai` in code; `fake` in `.env.example` | `fake`, `openai`, or `gemini` |
+| `LLM_PROVIDER` | `openai` in code; `fake` in `.env.example` | `fake`, `openai`, or `gemini` |
+| `MAX_CHUNKS_TO_EMBED` | `50` | Safety cap before embedding API calls |
+| `SQLITE_DB_PATH` | `./data/ai_repository_assistant.db` locally | SQLite file path; overridden to `/app/data/ai_repository_assistant.db` in Docker Compose |
+| `OPENAI_API_KEY` | empty | Required when using OpenAI providers |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI embedding model |
+| `OPENAI_CHAT_MODEL` | `gpt-4.1-mini` | OpenAI chat model |
+| `GEMINI_API_KEY` | empty | Required when using Gemini providers |
+| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001` | Gemini embedding model |
+| `GEMINI_CHAT_MODEL` | `gemini-2.0-flash` | Gemini chat model |
+
+### Local development without paid API keys
+
+`.env.example` defaults to fake providers (no API keys required):
 
 ```env
 EMBEDDING_PROVIDER=fake
 LLM_PROVIDER=fake
-MAX_CHUNKS_TO_EMBED=50
 ```
 
-This lets you manually test `/repositories/index`, `/repositories/search`, and `/repositories/ask` without OpenAI or Gemini credentials.
-
-### Production embedding providers
-
-OpenAI (default):
-
-```env
-EMBEDDING_PROVIDER=openai
-OPENAI_API_KEY=your-key
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-```
-
-For Gemini:
-
-```env
-EMBEDDING_PROVIDER=gemini
-GEMINI_API_KEY=your-key
-GEMINI_EMBEDDING_MODEL=gemini-embedding-001
-```
-
-For LLM answering with OpenAI:
-
-```env
-LLM_PROVIDER=openai
-OPENAI_CHAT_MODEL=gpt-4.1-mini
-```
-
-For Gemini chat:
-
-```env
-LLM_PROVIDER=gemini
-GEMINI_CHAT_MODEL=gemini-2.0-flash
-```
-
-### OpenAI billing / quota
-
-Indexing calls the embedding API once per chunk batch. If your OpenAI account has no billing or exceeded quota, `/repositories/index` returns `402` with a clear message instead of a raw server error.
-
-Use `EMBEDDING_PROVIDER=fake` for local development, or ensure your OpenAI account has active billing before indexing real repositories.
-
-### Safety limit: `MAX_CHUNKS_TO_EMBED`
-
-Default: `50`. If a repository produces more chunks than this limit, indexing stops **before** any embedding API call and returns `400` with a clear error. Increase the limit only when you intentionally want to index larger repositories.
+Copy `.env.example` to `.env` to use these defaults.
 
 ## Run the API
+
+### Without Docker
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-The API will be available at `http://127.0.0.1:8000`.
+### With Docker
 
-Interactive docs: `http://127.0.0.1:8000/docs`
-
-## Endpoints
-
-### `GET /health`
-
-Returns service status.
-
-```json
-{ "status": "ok" }
+```bash
+docker compose up --build
 ```
 
-### `POST /repositories/scan`
-
-Scans a local repository path.
-
-Request:
-
-```json
-{ "path": "D:/projects/my-repo" }
-```
-
-Response includes `repository_path`, `total_files`, `total_lines`, `languages`, `files`, `ignored_directories`, and `ignored_files`.
-
-### Security: excluded secret files
-
-The scanner intentionally skips sensitive files such as `.env`, `.env.local`, `*.pem`, `*.key`, `id_rsa`, `credentials.json`, and `secrets.json`. These files are never chunked or indexed.
-
-**Never commit `.env` files to git.** Keep API keys out of repositories you scan in production.
-
-### `POST /repositories/chunks`
-
-Extracts readable file content and splits it into overlapping line-based chunks.
-
-Request:
-
-```json
-{
-  "path": "D:/projects/my-repo",
-  "max_lines_per_chunk": 80,
-  "overlap_lines": 10
-}
-```
-
-Response includes `repository_path`, `total_files_processed`, `total_files_skipped`, `total_chunks`, `chunks`, and `skipped_files`.
-
-### `POST /repositories/index`
-
-Indexes repository chunks with embeddings for semantic search.
-
-Request:
-
-```json
-{
-  "path": "D:/projects/my-repo",
-  "max_lines_per_chunk": 80,
-  "overlap_lines": 10
-}
-```
-
-Response includes `index_id`, `repository_path`, `total_chunks_indexed`, and `embedding_model`. Data is persisted to SQLite and survives API restarts.
-
-### `GET /repositories/indexes`
-
-Lists persisted repository indexes.
-
-### `GET /repositories/indexes/{index_id}`
-
-Returns metadata for one persisted index.
-
-### `DELETE /repositories/indexes/{index_id}`
-
-Deletes an index and its chunks from SQLite.
-
-### `POST /repositories/search`
-
-Searches an indexed repository by semantic similarity.
-
-Request:
-
-```json
-{
-  "index_id": "some-generated-id",
-  "query": "Where is the chunking logic implemented?",
-  "top_k": 5,
-  "include_tests": false
-}
-```
-
-Each result includes `source_type` (`source`, `test`, `docs`, `config`, or `other`). Set `include_tests` to `false` to exclude test files from results without changing similarity scoring.
-
-Response includes `index_id`, `query`, `total_results`, and ranked `results`.
-
-### `POST /repositories/ask`
-
-Answers a question about an already indexed repository using retrieved chunks and an LLM.
-
-Request:
-
-```json
-{
-  "index_id": "some-generated-id",
-  "question": "Where is the chunking logic implemented?",
-  "top_k": 5,
-  "include_tests": false
-}
-```
-
-Response includes `answer` and `sources` (file path, line range, score, `source_type`). Requires a prior call to `/repositories/index`; it does not reindex.
+Stop with `Ctrl+C` or `docker compose down`.
 
 ## Run tests
+
+Tests run on the host with pytest. Docker is not required.
 
 ```bash
 pytest
 ```
 
-Tests use fake embedding and LLM providers and never call OpenAI or Gemini.
+Tests use fake embedding and LLM providers and temporary SQLite databases. They never call OpenAI or Gemini and never touch `./data/ai_repository_assistant.db`.
+
+## Manual demo flow
+
+Use fake providers (`.env.example` defaults) for a free end-to-end check.
+
+### 1. Start the API
+
+Local: `uvicorn app.main:app --reload`
+
+Docker: `docker compose up --build`
+
+### 2. Health check
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Expected:
+
+```json
+{ "status": "ok" }
+```
+
+### 3. Index a repository
+
+Replace `YOUR_REPO_PATH` or use `/workspace` when running in Docker.
+
+**macOS / Linux (local path):**
+
+```bash
+curl -X POST http://127.0.0.1:8000/repositories/index -H "Content-Type: application/json" -d '{"path": "/path/to/your/repo"}'
+```
+
+**Windows (PowerShell, local path):**
+
+```powershell
+curl -X POST http://127.0.0.1:8000/repositories/index -H "Content-Type: application/json" -d '{\"path\": \"D:/projects/ai-repository-assistant\"}'
+```
+
+**Docker (any OS, repo mounted at `/workspace`):**
+
+```bash
+curl -X POST http://127.0.0.1:8000/repositories/index -H "Content-Type: application/json" -d '{"path": "/workspace"}'
+```
+
+Save the `index_id` from the response.
+
+### 4. Search the index
+
+```bash
+curl -X POST http://127.0.0.1:8000/repositories/search -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "query": "Where is chunking implemented?", "top_k": 3, "include_tests": false}'
+```
+
+### 5. Ask a question
+
+```bash
+curl -X POST http://127.0.0.1:8000/repositories/ask -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "question": "Where is chunking implemented?", "top_k": 3, "include_tests": false}'
+```
+
+### 6. List indexes
+
+```bash
+curl http://127.0.0.1:8000/repositories/indexes
+```
+
+### 7. Verify persistence (optional)
+
+Restart the API (or run `docker compose down` then `docker compose up --build`) and repeat search or ask with the same `index_id`. Results should still work as long as the local `./data` directory was not deleted.
+
+## Docker manual verification
+
+```bash
+docker compose up --build
+curl http://127.0.0.1:8000/health
+```
+
+Run the index → search → ask → list flow above with `{"path": "/workspace"}`. Restart the container and confirm the same `index_id` still works while `./data` remains on the host.
+
+## API endpoints
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/health` | Service health |
+| `POST` | `/repositories/scan` | Scan repository metadata |
+| `POST` | `/repositories/chunks` | Extract and chunk files |
+| `POST` | `/repositories/index` | Index repository chunks |
+| `POST` | `/repositories/search` | Semantic search |
+| `POST` | `/repositories/ask` | RAG answer with citations |
+| `GET` | `/repositories/indexes` | List persisted indexes |
+| `GET` | `/repositories/indexes/{index_id}` | Get index metadata |
+| `DELETE` | `/repositories/indexes/{index_id}` | Delete index and chunks |
+
+Interactive docs: `http://127.0.0.1:8000/docs`
+
+### Security: excluded secret files
+
+The scanner skips sensitive files such as `.env`, `.env.local`, `*.pem`, `*.key`, `id_rsa`, `credentials.json`, and `secrets.json`. These files are never chunked or indexed.
+
+### OpenAI billing / quota
+
+If OpenAI quota is exceeded, `/repositories/index` returns `402` with a clear message. Use `EMBEDDING_PROVIDER=fake` for local development.
+
+### Safety limit: `MAX_CHUNKS_TO_EMBED`
+
+Default `50`. Repositories with more chunks return `400` before any embedding API call.
 
 ## Project structure
 
@@ -248,8 +278,19 @@ app/
   schemas/
   utils/
 tests/
+Dockerfile
+docker-compose.yml
 ```
+
+## Milestones
+
+- **M1:** FastAPI backend, repository scanner, file filtering
+- **M2:** Content extraction, chunking, skipped-file traceability
+- **M3:** Embedding providers, semantic search, `source_type`, `include_tests`
+- **M4:** LLM providers, RAG answering with citations
+- **M5:** SQLite persistence and index management
+- **M6:** Docker and developer experience (this milestone)
 
 ## Next steps
 
-See `PROJECT_NOTES.md` for milestone roadmap and technical decisions.
+See `PROJECT_NOTES.md` for architecture notes and future work.

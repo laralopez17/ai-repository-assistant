@@ -10,7 +10,23 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Current Milestone
 
-### Milestone 5 — SQLite Persistence + Index Management (implemented; pending manual verification)
+### Milestone 6 — Docker + Developer Experience (implemented; pending manual verification)
+
+**Problem Docker solves:** New contributors should not need to guess Python version, virtualenv steps, or dependency installs. Docker provides a reproducible local runtime with the same FastAPI app, env-driven providers, and persisted SQLite indexes.
+
+**Added:**
+
+- `Dockerfile` for the FastAPI backend (Python 3.11-slim, uvicorn)
+- `.dockerignore` to keep secrets, venvs, caches, and local DB files out of the image
+- `docker-compose.yml` with port mapping, `.env` loading, and `./data` bind mount for SQLite
+- README quickstart for local and Docker workflows, curl demo flow, and env variable reference
+- Default fake providers in `.env.example` so manual verification needs no paid API keys
+
+**Out of scope for M6:** cloud deployment, CI/CD, Kubernetes, production hardening, new AI features.
+
+**Future production/deployment improvements (deferred):** managed hosting (Render/Railway/Fly.io/AWS), secrets manager, health/readiness probes for orchestrators, multi-stage image builds, non-root container user, Postgres if SQLite limits are hit.
+
+### Milestone 5 — SQLite Persistence + Index Management (completed)
 
 Implemented on top of Milestones 1–4:
 
@@ -43,8 +59,7 @@ Prepare repository content for indexing by extracting readable source files and 
 - FastAPI
 - Pydantic
 - pytest
-- Docker later
-- LLM/RAG later
+- Docker (local development only)
 
 ## Architecture Decisions
 
@@ -121,6 +136,15 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 
 `MAX_CHUNKS_TO_EMBED` (default `50`) is checked in `RepositoryIndexer` before calling the embedding provider. Repositories exceeding this limit return `400` without incurring API cost.
 
+### Docker (local development)
+
+- `Dockerfile` builds a Python 3.11 image with `requirements.txt` dependencies.
+- `docker-compose.yml` runs the API on port 8000, loads `.env`, and overrides `SQLITE_DB_PATH` to `/app/data/ai_repository_assistant.db` (even if `.env` uses a local relative path).
+- Host `./data` is bind-mounted to `/app/data`; indexes persist across container restarts as long as `./data` is kept on the host.
+- `${REPO_MOUNT_SOURCE:-.}:/workspace:ro` mounts a repository read-only at `/workspace`; set `REPO_MOUNT_SOURCE` to index a different repo, always using `{"path": "/workspace"}` in API requests.
+- `.env` is gitignored and excluded from the image; `.env.example` defaults to `EMBEDDING_PROVIDER=fake` and `LLM_PROVIDER=fake`.
+- Docker is not production deployment; it standardizes the local developer experience.
+
 ### SQLite persistence
 
 - `SQLITE_DB_PATH` (default `./data/ai_repository_assistant.db`) is the single source of truth.
@@ -144,10 +168,10 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 - Sources are returned separately from the answer (metadata only, no chunk body in citations).
 - If retrieval returns no chunks, the service answers with a safe insufficient-context message without calling the LLM.
 
-## Next Steps (post-M5 / v1 polish)
+## Next Steps (post-M6)
 
-1. Docker and developer setup documentation
-2. Manual demo flow verification end-to-end
+1. Manual Docker verification end-to-end (index → restart → search/ask)
+2. Mark v1 portfolio-complete after demo flow is verified
 3. Integrate GitHub API for remote repository ingestion (future)
 4. Introduce agent orchestration only after v1 is stable (future)
 
