@@ -8,9 +8,9 @@ Build a backend-first AI application that can analyze code repositories and answ
 
 Portfolio project for Backend / AI Applications Engineer roles.
 
-## Current Milestone
+## Milestones
 
-### Milestone 6 — Docker + Developer Experience (implemented; pending manual verification)
+### Milestone 6 — Docker + Developer Experience (completed)
 
 **Problem Docker solves:** New contributors should not need to guess Python version, virtualenv steps, or dependency installs. Docker provides a reproducible local runtime with the same FastAPI app, env-driven providers, and persisted SQLite indexes.
 
@@ -39,19 +39,69 @@ Implemented on top of Milestones 1–4:
 
 Intentionally deferred: in-memory cache, ORM, Postgres/pgvector.
 
-### Milestone 4 — Completed
+### Milestone 4 — RAG Answering with Citations (completed)
 
-Implemented the FastAPI backend foundation with:
+Implemented on top of Milestones 1–3:
 
-- Health check endpoint
-- Local repository scan endpoint
-- Clean layered structure
-- Repository scanner service
-- File filtering for generated/cache directories
-- Basic pytest coverage
+- `LLMProvider` protocol with OpenAI, Gemini, and fake providers
+- `get_llm_provider()` factory driven by `LLM_PROVIDER`
+- `RAGAnswerService` orchestrating semantic search + grounded answer generation
+- `rag_prompt.py` for prompt construction; providers handle API calls only
+- `POST /repositories/ask` returning `answer` and `sources` (metadata citations, no chunk body)
+- Insufficient-context path returns a safe message without calling the LLM
+- Tests use fake providers only; no external API calls in CI
 
-Next milestone:
-Prepare repository content for indexing by extracting readable source files and creating chunks with metadata.
+Still excluded at this stage: agents, tool calling, MCP, persistence (added in M5).
+
+### Milestone 3 — Embeddings + Semantic Search (completed)
+
+Implemented on top of Milestones 1–2:
+
+- `EmbeddingProvider` protocol with OpenAI, Gemini, and fake providers
+- `get_embedding_provider()` factory driven by `EMBEDDING_PROVIDER`
+- `RepositoryIndexer` for scan → extract → chunk → embed → store
+- `SemanticSearchService` for query embedding and ranked retrieval
+- `POST /repositories/index` and `POST /repositories/search`
+- `source_type` metadata (`source`, `test`, `docs`, `config`, `other`) via `app/utils/source_type.py`
+- `include_tests` filtering on search results
+- `MAX_CHUNKS_TO_EMBED` safety cap checked before embedding API calls
+- `EmbeddingProviderError` mapping OpenAI quota to HTTP `402` and rate limits to `429`
+- `FakeEmbeddingProvider` for deterministic local dev and tests
+
+Originally used an in-memory vector store; replaced by SQLite persistence in M5.
+
+### Milestone 2 — Content Extraction + Chunking (completed)
+
+Implemented on top of Milestone 1:
+
+- `ContentExtractor` for reading scanned text files into `FileContent`
+- `ChunkingService` for line-based chunking with configurable overlap
+- `POST /repositories/chunks` endpoint
+- Domain models: `FileContent`, `ContentChunk`, `SkippedFile`, `ChunkingResult`
+- Skipped files recorded with explicit `reason` (binary, unreadable, sensitive, etc.)
+- `chunk_id` format: `{normalized_path}::chunk-000`
+- Overlap validation: `overlap_lines` must be less than `max_lines_per_chunk` (Pydantic + service)
+
+Prepared repository content for embedding and search in M3.
+
+### Milestone 1 — Backend Foundation + Repository Scanner (completed)
+
+Initial FastAPI backend:
+
+- `GET /health` health check
+- `POST /repositories/scan` for local repository analysis
+- `RepositoryScanner` walking the filesystem recursively
+- Ignored directories: `.git`, `node_modules`, `dist`, `build`, `target`, venvs, caches, IDE folders
+- Sensitive file exclusion: `.env`, `.env.*`, `*.pem`, `*.key`, `id_rsa`, `credentials.json`, etc.
+- Binary detection (null-byte sample) and 1 MB file size cap
+- Line counting and `languages` aggregation by extension
+- Layered structure: `api/routes`, `schemas`, `domain`, `services`, `core`, `utils`
+- Domain errors raised in services, mapped to HTTP status codes in routes
+- Basic pytest coverage for scanner and API endpoints
+
+## Current Milestone
+
+Milestone 6 is complete. v1 portfolio polish: verify the full demo flow end-to-end and treat remaining items in **Next Steps** as future work unless promoted.
 
 ## Tech Stack
 
@@ -108,8 +158,8 @@ Never commit `.env` files. Treat repository scanning as untrusted input when poi
 
 - No GitHub API (local paths first).
 - No agents or MCP in v1.
-- No Docker yet (planned for v1 polish).
-- No in-memory cache in M5.
+- No cloud deployment in v1.
+- No in-memory cache in M5+.
 
 ## Learning Goals
 
@@ -168,12 +218,11 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 - Sources are returned separately from the answer (metadata only, no chunk body in citations).
 - If retrieval returns no chunks, the service answers with a safe insufficient-context message without calling the LLM.
 
-## Next Steps (post-M6)
+## Next Steps (post-v1)
 
-1. Manual Docker verification end-to-end (index → restart → search/ask)
-2. Mark v1 portfolio-complete after demo flow is verified
-3. Integrate GitHub API for remote repository ingestion (future)
-4. Introduce agent orchestration only after v1 is stable (future)
+1. Integrate GitHub API for remote repository ingestion (future)
+2. Introduce agent orchestration only after v1 is stable (future)
+3. Production deployment patterns (hosting, secrets, observability) when scope expands beyond portfolio v1
 
 ### Project Scope Rule
 
