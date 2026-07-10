@@ -10,6 +10,23 @@ Portfolio project for Backend / AI Applications Engineer roles.
 
 ## Milestones
 
+### Milestone 8 — Demo / CLI Flow (implemented; pending manual verification)
+
+**Problem the demo solves:** Portfolio reviewers and new developers need a one-command way to see the full product flow without assembling curl requests by hand.
+
+**Why HTTP instead of internal services:** The script behaves like an external client. That validates the real API contract, keeps the demo decoupled from backend internals, and matches how a user would experience the system.
+
+**Added:**
+
+- `scripts/demo_github.py` CLI with `--url`, `--question`, `--api-base-url`, `--top-k`, `--include-tests`
+- Step-by-step terminal output: health → index-github → search → ask → list indexes
+- Tests with mocked `httpx` (no live API, GitHub, OpenAI, or Gemini)
+- README “Run the demo” section
+
+**Out of scope for M8:** UI, starting the API from the script, Docker orchestration inside the script, agents, new backend features.
+
+**Future improvements (deferred):** richer local-path demo, colored output, JSON export mode, demo against a recorded fixture server.
+
 ### Milestone 7 — GitHub Ingestion for Public Repositories (completed)
 
 **Problem GitHub ingestion solves:** Users should be able to index a public repository from a URL without manually cloning it first. M7 adds a new ingestion source while keeping the same processing pipeline and SQLite persistence.
@@ -129,7 +146,7 @@ Initial FastAPI backend:
 
 ## Current Milestone
 
-Milestone 7 is implemented. Manual verification: index a real public GitHub repo via Docker or local API, then search/ask with the returned `index_id`.
+Milestone 8 is implemented. Manual verification: start the API, run `python scripts/demo_github.py --url <public-github-url> --question "..."`, confirm search + RAG output.
 
 ## Tech Stack
 
@@ -252,10 +269,10 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 - Sources are returned separately from the answer (metadata only, no chunk body in citations).
 - If retrieval returns no chunks, the service answers with a safe insufficient-context message without calling the LLM.
 
-## Next Steps (post-M7)
+## Next Steps (post-M8)
 
-1. Manual GitHub ingestion verification with a real public repository
-2. Mark v1 portfolio-complete after local + Docker + GitHub demo flows are verified
+1. Manual demo verification with a public GitHub repository and fake providers
+2. Mark v1 portfolio-complete after local + Docker + GitHub + demo flows are verified
 3. Private repo / GitHub token support (future)
 4. Agent orchestration and GitHub API expansion (future)
 

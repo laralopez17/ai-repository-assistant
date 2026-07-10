@@ -151,6 +151,48 @@ docker compose up --build
 
 Stop with `Ctrl+C` or `docker compose down`.
 
+## Run the demo
+
+The GitHub demo script is an **external HTTP client**. It does not start the API and does not import internal services. Start the API first (local or Docker), then run the script.
+
+Use fake providers in `.env` for a free local demo (`EMBEDDING_PROVIDER=fake`, `LLM_PROVIDER=fake`).
+
+### 1. Start the API
+
+Local:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Docker:
+
+```bash
+docker compose up --build
+```
+
+### 2. Run the demo script
+
+```bash
+python scripts/demo_github.py --url https://github.com/laralopez17/BooksRecommender --question "What does this project do?"
+```
+
+Optional flags:
+
+```bash
+python scripts/demo_github.py --url https://github.com/laralopez17/BooksRecommender --question "Where is the recommendation logic implemented?" --api-base-url http://127.0.0.1:8000 --top-k 3
+```
+
+### What the demo does
+
+1. `GET /health` — confirm the API is reachable
+2. `POST /repositories/index-github` — clone and index a public GitHub repository
+3. `POST /repositories/search` — semantic search with the question as the query
+4. `POST /repositories/ask` — RAG answer with source citations
+5. `GET /repositories/indexes` — show persisted indexes in SQLite
+
+The script prints the `index_id`, chunk count, embedding model, top search hits (path, score, source type, line range), the final answer, and answer sources. Full chunk bodies are not dumped by default.
+
 ## Run tests
 
 Tests run on the host with pytest. Docker is not required.
@@ -309,6 +351,8 @@ app/
   schemas/
   utils/
 tests/
+scripts/
+  demo_github.py
 Dockerfile
 docker-compose.yml
 ```
@@ -322,6 +366,7 @@ docker-compose.yml
 - **M5:** SQLite persistence and index management
 - **M6:** Docker and developer experience
 - **M7:** GitHub ingestion for public repositories
+- **M8:** Demo / CLI flow (this milestone)
 
 ## Next steps
 
