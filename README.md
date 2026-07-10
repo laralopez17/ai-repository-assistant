@@ -64,7 +64,7 @@ flowchart LR
 Docker is for **local development and reproducible execution**, not production deployment.
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/laralopez17/ai-repository-assistant.git
 cd ai-repository-assistant
 cp .env.example .env   # Windows: copy .env.example .env
 docker compose up --build
