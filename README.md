@@ -242,4 +242,4 @@ PORTFOLIO_NOTES.md Interview pitch and CV bullets
 | M8        | CLI demo + chunk size safeguard          |
 | M9        | Portfolio polish + v1 closure            |
 
-See `PROJECT_NOTES.md` for detailed engineering notes and `PORTFOLIO_NOTES.md` for interview / CV wording.
+See `PROJECT_NOTES.md` for detailed engineering notes.
