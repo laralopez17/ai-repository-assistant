@@ -1,378 +1,245 @@
 # AI Repository Assistant
 
-Backend service that scans local code repositories, chunks readable content, indexes embeddings in SQLite, and answers questions with RAG and citations.
+**Status: Portfolio v1 complete after M9.**
 
-## What it does
+AI Repository Assistant is a backend-first RAG system that lets users index local or public GitHub repositories and ask source-grounded questions about the codebase.
 
-- Scan a local repository path and summarize files, languages, and ignored paths
-- Extract readable source files and split them into overlapping chunks
-- Index chunks with embeddings (OpenAI, Gemini, or fake providers for local dev)
-- Search indexed content by semantic similarity
-- Ask questions grounded in retrieved chunks with source citations
-- Persist indexes in SQLite across API restarts
+It scans readable files, chunks them, generates embeddings through provider abstractions, persists indexes in SQLite, retrieves relevant chunks with semantic search, and returns answers with citations.
 
-## Prerequisites
+## Why this project matters
 
-- Python 3.11+ (local setup)
-- Docker and Docker Compose (optional, for containerized local dev)
+Built as a portfolio project for **Backend / AI Applications Engineer** roles. It demonstrates:
 
-## Quickstart (local, no Docker)
+- Clean FastAPI layered architecture (routes, schemas, domain, services)
+- End-to-end RAG pipeline with citations
+- Semantic search over code chunks
+- Provider abstraction (OpenAI, Gemini, fake) for embeddings and LLMs
+- SQLite persistence and index management
+- Dockerized local development
+- Safe public GitHub ingestion
+- A CLI demo that exercises the real HTTP API
 
-**Windows (PowerShell or cmd):**
+## Key features
 
-```bash
-git clone <repository-url>
-cd ai-repository-assistant
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-uvicorn app.main:app --reload
+- Local repository scanning and indexing
+- Public GitHub repository ingestion by URL
+- Sensitive file exclusion (`.env`, keys, credentials)
+- Content extraction and line-based chunking with character-length safeguards
+- Embeddings via OpenAI, Gemini, or fake providers
+- Semantic search with `source_type` and `include_tests` filtering
+- RAG answers with source citations
+- SQLite persistence across API restarts
+- Index list / get / delete endpoints
+- Docker Compose setup for reproducible local runs
+- CLI demo: `scripts/demo_github.py`
+
+## Architecture overview
+
+GitHub ingestion is a **source adapter**. After clone, it reuses the same indexing pipeline as local paths.
+
+```mermaid
+flowchart LR
+  subgraph sources [Ingestion sources]
+    LocalPath[Local path]
+    GitHubURL[Public GitHub URL]
+  end
+
+  LocalPath --> Scanner[RepositoryScanner]
+  GitHubURL --> Ingestor[GitHubRepositoryIngestor]
+  Ingestor -->|temp clone| Scanner
+
+  Scanner --> Extractor[ContentExtractor]
+  Extractor --> Chunking[ChunkingService]
+  Chunking --> Embeddings[EmbeddingProvider]
+  Embeddings --> Store[SQLiteIndexStore]
+  Store --> Search[SemanticSearchService]
+  Search --> RAG[RAGAnswerService]
+  RAG --> Answer[Answer + Sources]
 ```
 
-**macOS / Linux:**
+**Layers:** `api/routes` (HTTP) → `services` (business logic) → `domain` / `utils` / `core`. Persistence goes through an `IndexStore` protocol implemented by `SQLiteIndexStore`.
 
-```bash
-git clone <repository-url>
-cd ai-repository-assistant
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn app.main:app --reload
-```
-
-Open `http://127.0.0.1:8000/docs` for interactive API docs.
-
-## Quickstart (Docker)
+## Quickstart (recommended: Docker)
 
 Docker is for **local development and reproducible execution**, not production deployment.
 
-**Windows:**
-
 ```bash
-copy .env.example .env
+git clone <repository-url>
+cd ai-repository-assistant
+cp .env.example .env   # Windows: copy .env.example .env
 docker compose up --build
 ```
 
-**macOS / Linux:**
+API: `http://127.0.0.1:8000` · Docs: `http://127.0.0.1:8000/docs`
+
+`.env.example` defaults to fake providers so you can demo without paid API keys.
+
+### SQLite in Docker
+
+Compose sets `SQLITE_DB_PATH=/app/data/ai_repository_assistant.db` and bind-mounts `./data:/app/data`. Indexes survive container restarts as long as `./data` is kept on the host.
+
+### Local setup (without Docker)
+
+Requires Python 3.11+.
 
 ```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
 cp .env.example .env
-docker compose up --build
-```
-
-The API listens on `http://127.0.0.1:8000`.
-
-### SQLite persistence in Docker
-
-Your `.env` may set `SQLITE_DB_PATH=./data/ai_repository_assistant.db` for local runs. **Docker Compose intentionally overrides this** at runtime to `/app/data/ai_repository_assistant.db` inside the container.
-
-The host persists that file through the bind mount `./data:/app/data`:
-
-- **Inside the container:** `/app/data/ai_repository_assistant.db`
-- **On your machine:** `./data/ai_repository_assistant.db`
-
-Indexes survive `docker compose down` and container restarts **as long as you keep the local `./data` directory**. If you delete `./data`, persisted indexes are removed. The `data/` directory is gitignored — do not commit database files.
-
-### Indexing a repository inside Docker
-
-Repository paths in API requests must exist **inside the container**.
-
-`docker-compose.yml` mounts a repository at `/workspace` in **read-only** mode via:
-
-```yaml
-${REPO_MOUNT_SOURCE:-.}:/workspace:ro
-```
-
-- **Default:** the current project directory (`.`) is mounted at `/workspace`.
-- **Custom repository:**
-
-  Bash / macOS / Linux:
-
-  ```bash
-  REPO_MOUNT_SOURCE=/path/to/repo docker compose up --build
-  ```
-
-  Windows PowerShell:
-
-  ```powershell
-  $env:REPO_MOUNT_SOURCE="D:/projects/my-repo"
-  docker compose up --build
-  ```
-
-In all cases, index with:
-
-```json
-{ "path": "/workspace" }
-```
-
-## Environment variables
-
-Copy `.env.example` to `.env`. Never commit `.env`.
-
-| Variable                 | Default                                     | Description                                                                              |
-| ------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `EMBEDDING_PROVIDER`     | `openai` in code; `fake` in `.env.example`  | `fake`, `openai`, or `gemini`                                                            |
-| `LLM_PROVIDER`           | `openai` in code; `fake` in `.env.example`  | `fake`, `openai`, or `gemini`                                                            |
-| `MAX_CHUNKS_TO_EMBED`    | `50`                                        | Safety cap before embedding API calls                                                    |
-| `MAX_CHARS_PER_CHUNK`    | `12000`                                     | Max characters per chunk; oversized line windows are split before embedding              |
-| `SQLITE_DB_PATH`         | `./data/ai_repository_assistant.db` locally | SQLite file path; overridden to `/app/data/ai_repository_assistant.db` in Docker Compose |
-| `OPENAI_API_KEY`         | empty                                       | Required when using OpenAI providers                                                     |
-| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small`                    | OpenAI embedding model                                                                   |
-| `OPENAI_CHAT_MODEL`      | `gpt-4.1-mini`                              | OpenAI chat model                                                                        |
-| `GEMINI_API_KEY`         | empty                                       | Required when using Gemini providers                                                     |
-| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001`                      | Gemini embedding model                                                                   |
-| `GEMINI_CHAT_MODEL`      | `gemini-2.0-flash`                          | Gemini chat model                                                                        |
-
-### Local development without paid API keys
-
-`.env.example` defaults to fake providers (no API keys required):
-
-```env
-EMBEDDING_PROVIDER=fake
-LLM_PROVIDER=fake
-```
-
-Copy `.env.example` to `.env` to use these defaults.
-
-## Run the API
-
-### Without Docker
-
-```bash
 uvicorn app.main:app --reload
 ```
-
-### With Docker
-
-```bash
-docker compose up --build
-```
-
-Stop with `Ctrl+C` or `docker compose down`.
 
 ## Run the demo
 
-The GitHub demo script is an **external HTTP client**. It does not start the API and does not import internal services. Start the API first (local or Docker), then run the script.
-
-Use fake providers in `.env` for a free local demo (`EMBEDDING_PROVIDER=fake`, `LLM_PROVIDER=fake`).
-
-### 1. Start the API
-
-Local:
+The demo script is an **external HTTP client**. The API must already be running. It does not import internal services. The demo flow has been manually verified with fake providers and OpenAI providers.
 
 ```bash
-uvicorn app.main:app --reload
-```
-
-Docker:
-
-```bash
+# Terminal 1 — start API (Docker or uvicorn)
 docker compose up --build
-```
 
-### 2. Run the demo script
-
-```bash
+# Terminal 2 — run demo
 python scripts/demo_github.py --url https://github.com/laralopez17/BooksRecommender --question "What does this project do?"
 ```
 
-Optional flags:
+Optional:
 
 ```bash
 python scripts/demo_github.py --url https://github.com/laralopez17/BooksRecommender --question "Where is the recommendation logic implemented?" --api-base-url http://127.0.0.1:8000 --top-k 3
 ```
 
-### What the demo does
+**What it does:** health → `index-github` → search → ask → list indexes. Prints `index_id`, chunk count, embedding model, top hits (path, score, source type, lines), answer, and sources.
 
-1. `GET /health` — confirm the API is reachable
-2. `POST /repositories/index-github` — clone and index a public GitHub repository
-3. `POST /repositories/search` — semantic search with the question as the query
-4. `POST /repositories/ask` — RAG answer with source citations
-5. `GET /repositories/indexes` — show persisted indexes in SQLite
+To use OpenAI or Gemini instead of fake providers, set `EMBEDDING_PROVIDER` / `LLM_PROVIDER` and API keys in `.env`, then restart the API.
 
-The script prints the `index_id`, chunk count, embedding model, top search hits (path, score, source type, line range), the final answer, and answer sources. Full chunk bodies are not dumped by default.
+## API examples
 
-## Run tests
+Interactive docs: `http://127.0.0.1:8000/docs`
 
-Tests run on the host with pytest. Docker is not required.
-
-```bash
-pytest
-```
-
-Tests use fake embedding and LLM providers and temporary SQLite databases. They never call OpenAI or Gemini and never touch `./data/ai_repository_assistant.db`.
-
-## Manual demo flow
-
-Use fake providers (`.env.example` defaults) for a free end-to-end check.
-
-### 1. Start the API
-
-Local: `uvicorn app.main:app --reload`
-
-Docker: `docker compose up --build`
-
-### 2. Health check
+| Method | Path                         | Purpose                   |
+| ------ | ---------------------------- | ------------------------- |
+| `POST` | `/repositories/index`        | Index a local path        |
+| `POST` | `/repositories/index-github` | Index a public GitHub URL |
+| `POST` | `/repositories/search`       | Semantic search           |
+| `POST` | `/repositories/ask`          | RAG answer with citations |
+| `GET`  | `/repositories/indexes`      | List persisted indexes    |
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl -X POST http://127.0.0.1:8000/repositories/index-github -H "Content-Type: application/json" -d '{"url": "https://github.com/owner/repo"}'
+
+curl -X POST http://127.0.0.1:8000/repositories/search -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "query": "Where is chunking implemented?", "top_k": 3, "include_tests": false}'
+
+curl -X POST http://127.0.0.1:8000/repositories/ask -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "question": "Where is chunking implemented?", "top_k": 3, "include_tests": false}'
+
+curl http://127.0.0.1:8000/repositories/indexes
 ```
 
-Expected:
-
-```json
-{ "status": "ok" }
-```
-
-### 3. Index a repository
-
-Replace `YOUR_REPO_PATH` or use `/workspace` when running in Docker.
-
-**macOS / Linux (local path):**
-
-```bash
-curl -X POST http://127.0.0.1:8000/repositories/index -H "Content-Type: application/json" -d '{"path": "/path/to/your/repo"}'
-```
-
-**Windows (PowerShell, local path):**
-
-```powershell
-curl -X POST http://127.0.0.1:8000/repositories/index -H "Content-Type: application/json" -d '{\"path\": \"D:/projects/ai-repository-assistant\"}'
-```
-
-**Docker (any OS, repo mounted at `/workspace`):**
+Local path indexing (host path, or `/workspace` when using Docker’s default mount):
 
 ```bash
 curl -X POST http://127.0.0.1:8000/repositories/index -H "Content-Type: application/json" -d '{"path": "/workspace"}'
 ```
 
-Save the `index_id` from the response.
+Also available: `GET /health`, `POST /repositories/scan`, `POST /repositories/chunks`, `GET|DELETE /repositories/indexes/{index_id}`.
 
-### 4. Search the index
+## Configuration
 
-```bash
-curl -X POST http://127.0.0.1:8000/repositories/search -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "query": "Where is chunking implemented?", "top_k": 3, "include_tests": false}'
-```
+Copy `.env.example` to `.env`. Never commit `.env`.
 
-### 5. Ask a question
+| Variable                 | Default                             | Description                               |
+| ------------------------ | ----------------------------------- | ----------------------------------------- |
+| `EMBEDDING_PROVIDER`     | `fake` in `.env.example`            | `fake`, `openai`, or `gemini`             |
+| `LLM_PROVIDER`           | `fake` in `.env.example`            | `fake`, `openai`, or `gemini`             |
+| `MAX_CHUNKS_TO_EMBED`    | `50`                                | Cap before embedding API calls            |
+| `MAX_CHARS_PER_CHUNK`    | `12000`                             | Split oversized line windows before embed |
+| `SQLITE_DB_PATH`         | `./data/ai_repository_assistant.db` | Overridden in Docker Compose              |
+| `OPENAI_API_KEY`         | empty                               | Required for OpenAI providers             |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small`            | OpenAI embedding model                    |
+| `OPENAI_CHAT_MODEL`      | `gpt-4.1-mini`                      | OpenAI chat model                         |
+| `GEMINI_API_KEY`         | empty                               | Required for Gemini providers             |
+| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001`              | Gemini embedding model                    |
+| `GEMINI_CHAT_MODEL`      | `gemini-2.0-flash`                  | Gemini chat model                         |
 
-```bash
-curl -X POST http://127.0.0.1:8000/repositories/ask -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "question": "Where is chunking implemented?", "top_k": 3, "include_tests": false}'
-```
-
-### 6. List indexes
-
-```bash
-curl http://127.0.0.1:8000/repositories/indexes
-```
-
-### 7. Verify persistence (optional)
-
-Restart the API (or run `docker compose down` then `docker compose up --build`) and repeat search or ask with the same `index_id`. Results should still work as long as the local `./data` directory was not deleted.
-
-## Docker manual verification
+## Testing
 
 ```bash
-docker compose up --build
-curl http://127.0.0.1:8000/health
+pytest
 ```
 
-Run the index → search → ask → list flow above with `{"path": "/workspace"}`. Restart the container and confirm the same `index_id` still works while `./data` remains on the host.
+- Fake embedding and LLM providers
+- Temporary SQLite databases (never `./data/ai_repository_assistant.db`)
+- No real GitHub, OpenAI, or Gemini network calls
+- Docker not required for tests
 
-## GitHub ingestion (public repositories)
+## Security and safety
 
-Index a **public** GitHub repository by URL. The app clones the repo into a temporary directory, runs the same scan → chunk → embed → persist pipeline as local indexing, then deletes the clone. The persisted artifact is the SQLite index, not the cloned repository.
+- Sensitive files (`.env`, `*.pem`, `*.key`, credentials) are excluded at scan time
+- Cloned GitHub repos are treated as untrusted; files are read, never executed
+- Only HTTPS `github.com/owner/repo` URLs; no `shell=True`
+- Temporary clones are cleaned up after indexing
+- `MAX_CHUNKS_TO_EMBED` and `MAX_CHARS_PER_CHUNK` limit embedding cost and input size
+- OpenAI quota/billing issues map to HTTP `402` with a clear message
 
-**Scope:** public `https://github.com/owner/repo` URLs only. Private repos, OAuth, GitHub App, PRs, issues, and agents are out of scope.
+## Design decisions / trade-offs
 
-**Requirements:** `git` must be installed on the host for local runs. The Docker image includes `git`.
+| Decision                       | Why                                                           |
+| ------------------------------ | ------------------------------------------------------------- |
+| SQLite instead of a vector DB  | Local-first v1; simple persistence without ops overhead       |
+| Python cosine similarity       | Enough for small indexes; avoids pgvector for portfolio scope |
+| Provider protocols + factories | Swap OpenAI / Gemini / fake without changing indexer or RAG   |
+| Fake providers                 | Deterministic tests and free local demos                      |
+| GitHub as source adapter       | One indexing pipeline; no duplicated scan/chunk/embed logic   |
+| Docker for local DX only       | Reproducible runs, not production deployment                  |
+| Char limit, not tokenizer      | Prevents oversized embeds without tiktoken dependency         |
 
-### Index a GitHub repository
+## Limitations
 
-```bash
-curl -X POST http://127.0.0.1:8000/repositories/index-github -H "Content-Type: application/json" -d '{"url": "https://github.com/owner/repo"}'
-```
+- Public GitHub repositories only (no auth / private repos)
+- No branch selection
+- No UI
+- No cloud deployment
+- No incremental reindexing
+- No ANN / dedicated vector database
+- SQLite / local-first only
+- For GitHub indexes, `repository_path` may reflect a temporary clone path; `github_url` is the meaningful source identifier
 
-Response includes `source: "github"` and `github_url` in addition to the standard index fields.
+## Future work
 
-### Search and ask after GitHub indexing
+Optional post-v1 improvements (not required for portfolio completeness):
 
-Use the returned `index_id` with the existing endpoints (unchanged):
-
-```bash
-curl -X POST http://127.0.0.1:8000/repositories/search -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "query": "How does authentication work?", "top_k": 3, "include_tests": false}'
-```
-
-```bash
-curl -X POST http://127.0.0.1:8000/repositories/ask -H "Content-Type: application/json" -d '{"index_id": "YOUR_INDEX_ID", "question": "How does authentication work?", "top_k": 3, "include_tests": false}'
-```
-
-Cloned repositories are treated as untrusted input. Sensitive files (`.env`, keys, etc.) are still excluded during scanning. No code from the repository is executed.
-
-## API endpoints
-
-| Method   | Path                               | Description                           |
-| -------- | ---------------------------------- | ------------------------------------- |
-| `GET`    | `/health`                          | Service health                        |
-| `POST`   | `/repositories/scan`               | Scan repository metadata              |
-| `POST`   | `/repositories/chunks`             | Extract and chunk files               |
-| `POST`   | `/repositories/index`              | Index local repository chunks         |
-| `POST`   | `/repositories/index-github`       | Index public GitHub repository by URL |
-| `POST`   | `/repositories/search`             | Semantic search                       |
-| `POST`   | `/repositories/ask`                | RAG answer with citations             |
-| `GET`    | `/repositories/indexes`            | List persisted indexes                |
-| `GET`    | `/repositories/indexes/{index_id}` | Get index metadata                    |
-| `DELETE` | `/repositories/indexes/{index_id}` | Delete index and chunks               |
-
-Interactive docs: `http://127.0.0.1:8000/docs`
-
-### Security: excluded secret files
-
-The scanner skips sensitive files such as `.env`, `.env.local`, `*.pem`, `*.key`, `id_rsa`, `credentials.json`, and `secrets.json`. These files are never chunked or indexed.
-
-### OpenAI billing / quota
-
-If OpenAI quota is exceeded, `/repositories/index` returns `402` with a clear message. Use `EMBEDDING_PROVIDER=fake` for local development.
-
-### Safety limit: `MAX_CHUNKS_TO_EMBED`
-
-Default `50`. Repositories with more chunks return `400` before any embedding API call.
-
-### Character limit: `MAX_CHARS_PER_CHUNK`
-
-Default `12000`. Line-based chunking still runs first. If a line-window chunk exceeds this character limit (for example a very long minified line), it is split into smaller character-based subchunks before embedding. This applies to both local and GitHub indexing.
+- Private repos, GitHub tokens / GitHub App
+- Branch selection and incremental reindexing
+- Postgres + pgvector or a vector DB
+- In-memory cache for hot indexes
+- Cloud deployment and CI/CD
+- UI
+- Agents / MCP
 
 ## Project structure
 
 ```
-app/
-  main.py
-  api/routes/
-  core/
-  domain/
-  services/
-  schemas/
-  utils/
-tests/
-scripts/
-  demo_github.py
+app/           FastAPI app, routes, services, domain, schemas
+tests/         pytest suite (fake providers, temp SQLite)
+scripts/       demo_github.py (HTTP client demo)
 Dockerfile
 docker-compose.yml
+PROJECT_NOTES.md   Engineering notes and milestone history
+PORTFOLIO_NOTES.md Interview pitch and CV bullets
 ```
 
-## Milestones
+## Milestones (v1)
 
-- **M1:** FastAPI backend, repository scanner, file filtering
-- **M2:** Content extraction, chunking, skipped-file traceability
-- **M3:** Embedding providers, semantic search, `source_type`, `include_tests`
-- **M4:** LLM providers, RAG answering with citations
-- **M5:** SQLite persistence and index management
-- **M6:** Docker and developer experience
-- **M7:** GitHub ingestion for public repositories
-- **M8:** Demo / CLI flow (this milestone)
+| Milestone | Focus                                    |
+| --------- | ---------------------------------------- |
+| M1        | FastAPI backend, scanner, file filtering |
+| M2        | Content extraction, chunking             |
+| M3        | Embeddings, semantic search              |
+| M4        | RAG answering with citations             |
+| M5        | SQLite persistence, index management     |
+| M6        | Docker + developer experience            |
+| M7        | Public GitHub ingestion                  |
+| M8        | CLI demo + chunk size safeguard          |
+| M9        | Portfolio polish + v1 closure            |
 
-## Next steps
-
-See `PROJECT_NOTES.md` for architecture notes and future work.
+See `PROJECT_NOTES.md` for detailed engineering notes and `PORTFOLIO_NOTES.md` for interview / CV wording.

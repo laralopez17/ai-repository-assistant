@@ -8,287 +8,26 @@ Build a backend-first AI application that can analyze code repositories and answ
 
 Portfolio project for Backend / AI Applications Engineer roles.
 
-## Milestones
+## Project status
 
-### Milestone 8 — Demo / CLI Flow (implemented; pending manual verification)
+**Portfolio v1 complete after M9.**
 
-**Problem the demo solves:** Portfolio reviewers and new developers need a one-command way to see the full product flow without assembling curl requests by hand.
+- M1–M9 delivered
+- M8 manually verified with fake providers and OpenAI
+- M9 closed documentation and presentation for portfolio readiness
+- Advanced ideas below are **post-v1 future improvements**, not open required milestones
 
-**Why HTTP instead of internal services:** The script behaves like an external client. That validates the real API contract, keeps the demo decoupled from backend internals, and matches how a user would experience the system.
-
-**Added:**
-
-- `scripts/demo_github.py` CLI with `--url`, `--question`, `--api-base-url`, `--top-k`, `--include-tests`
-- Step-by-step terminal output: health → index-github → search → ask → list indexes
-- Tests with mocked `httpx` (no live API, GitHub, OpenAI, or Gemini)
-- README “Run the demo” section
-
-**Out of scope for M8:** UI, starting the API from the script, Docker orchestration inside the script, agents, new backend features.
-
-**Future improvements (deferred):** richer local-path demo, colored output, JSON export mode, demo against a recorded fixture server.
-
-### Milestone 7 — GitHub Ingestion for Public Repositories (completed)
-
-**Problem GitHub ingestion solves:** Users should be able to index a public repository from a URL without manually cloning it first. M7 adds a new ingestion source while keeping the same processing pipeline and SQLite persistence.
-
-**Added:**
-
-- `POST /repositories/index-github` for public `https://github.com/owner/repo` URLs
-- `GitHubRepositoryIngestor` cloning with `git clone --depth 1` via `subprocess.run` (no `shell=True`)
-- URL validation in `app/utils/github_url.py` (HTTPS, `github.com` only, owner/repo path)
-- Temporary clone directory with automatic cleanup after indexing
-- Reuses `RepositoryIndexer` → `SQLiteIndexStore` (no duplicated scan/chunk/embed logic)
-- `git` installed in Docker image
-- Tests mock clone operations; no real GitHub network calls in CI
-
-**Why reuse the existing pipeline:** Ingestion source differs (local path vs GitHub URL), but scan, chunk, embed, persist, search, and ask are identical. A separate pipeline would duplicate logic and drift from local behavior.
-
-**Security considerations:**
-
-- Cloned repos are untrusted; files are read, never executed
-- HTTPS GitHub URLs only; credentials in URLs rejected
-- Sensitive file exclusion remains active during indexing
-- No GitHub tokens, OAuth, or private repo support in M7
-- Clone timeout (60s) and clear error mapping (400/404/500/504)
-
-**Out of scope for M7:** private repos, GitHub tokens, GitHub App, PRs, issues, agents, permanent clone cache.
-
-**Future improvements (deferred):** private repository support, GitHub token auth, GitHub App integration, rate limit handling, repository size limits, branch selection, incremental re-indexing, clone cache, webhook-based reindexing.
-
-### Milestone 6 — Docker + Developer Experience (completed)
-
-**Problem Docker solves:** New contributors should not need to guess Python version, virtualenv steps, or dependency installs. Docker provides a reproducible local runtime with the same FastAPI app, env-driven providers, and persisted SQLite indexes.
-
-**Added:**
-
-- `Dockerfile` for the FastAPI backend (Python 3.11-slim, uvicorn)
-- `.dockerignore` to keep secrets, venvs, caches, and local DB files out of the image
-- `docker-compose.yml` with port mapping, `.env` loading, and `./data` bind mount for SQLite
-- README quickstart for local and Docker workflows, curl demo flow, and env variable reference
-- Default fake providers in `.env.example` so manual verification needs no paid API keys
-
-**Out of scope for M6:** cloud deployment, CI/CD, Kubernetes, production hardening, new AI features.
-
-**Future production/deployment improvements (deferred):** managed hosting (Render/Railway/Fly.io/AWS), secrets manager, health/readiness probes for orchestrators, multi-stage image builds, non-root container user, Postgres if SQLite limits are hit.
-
-### Milestone 5 — SQLite Persistence + Index Management (completed)
-
-Implemented on top of Milestones 1–4:
-
-- `IndexStore` protocol with `SQLiteIndexStore` as the single source of truth
-- SQLite schema for `indexes` and `chunks` with cascade delete
-- Embeddings stored as JSON; cosine similarity in `app/utils/similarity.py`
-- Index management endpoints: list, get, delete
-- `/repositories/search` and `/repositories/ask` read from SQLite after restart
-- Tests use temporary SQLite files only
-
-Intentionally deferred: in-memory cache, ORM, Postgres/pgvector.
-
-### Milestone 4 — RAG Answering with Citations (completed)
-
-Implemented on top of Milestones 1–3:
-
-- `LLMProvider` protocol with OpenAI, Gemini, and fake providers
-- `get_llm_provider()` factory driven by `LLM_PROVIDER`
-- `RAGAnswerService` orchestrating semantic search + grounded answer generation
-- `rag_prompt.py` for prompt construction; providers handle API calls only
-- `POST /repositories/ask` returning `answer` and `sources` (metadata citations, no chunk body)
-- Insufficient-context path returns a safe message without calling the LLM
-- Tests use fake providers only; no external API calls in CI
-
-Still excluded at this stage: agents, tool calling, MCP, persistence (added in M5).
-
-### Milestone 3 — Embeddings + Semantic Search (completed)
-
-Implemented on top of Milestones 1–2:
-
-- `EmbeddingProvider` protocol with OpenAI, Gemini, and fake providers
-- `get_embedding_provider()` factory driven by `EMBEDDING_PROVIDER`
-- `RepositoryIndexer` for scan → extract → chunk → embed → store
-- `SemanticSearchService` for query embedding and ranked retrieval
-- `POST /repositories/index` and `POST /repositories/search`
-- `source_type` metadata (`source`, `test`, `docs`, `config`, `other`) via `app/utils/source_type.py`
-- `include_tests` filtering on search results
-- `MAX_CHUNKS_TO_EMBED` safety cap checked before embedding API calls
-- `EmbeddingProviderError` mapping OpenAI quota to HTTP `402` and rate limits to `429`
-- `FakeEmbeddingProvider` for deterministic local dev and tests
-
-Originally used an in-memory vector store; replaced by SQLite persistence in M5.
-
-### Milestone 2 — Content Extraction + Chunking (completed)
-
-Implemented on top of Milestone 1:
-
-- `ContentExtractor` for reading scanned text files into `FileContent`
-- `ChunkingService` for line-based chunking with configurable overlap
-- `POST /repositories/chunks` endpoint
-- Domain models: `FileContent`, `ContentChunk`, `SkippedFile`, `ChunkingResult`
-- Skipped files recorded with explicit `reason` (binary, unreadable, sensitive, etc.)
-- `chunk_id` format: `{normalized_path}::chunk-000`
-- Overlap validation: `overlap_lines` must be less than `max_lines_per_chunk` (Pydantic + service)
-
-Prepared repository content for embedding and search in M3.
-
-### Milestone 1 — Backend Foundation + Repository Scanner (completed)
-
-Initial FastAPI backend:
-
-- `GET /health` health check
-- `POST /repositories/scan` for local repository analysis
-- `RepositoryScanner` walking the filesystem recursively
-- Ignored directories: `.git`, `node_modules`, `dist`, `build`, `target`, venvs, caches, IDE folders
-- Sensitive file exclusion: `.env`, `.env.*`, `*.pem`, `*.key`, `id_rsa`, `credentials.json`, etc.
-- Binary detection (null-byte sample) and 1 MB file size cap
-- Line counting and `languages` aggregation by extension
-- Layered structure: `api/routes`, `schemas`, `domain`, `services`, `core`, `utils`
-- Domain errors raised in services, mapped to HTTP status codes in routes
-- Basic pytest coverage for scanner and API endpoints
-
-## Current Milestone
-
-Milestone 8 is implemented. Manual verification: start the API, run `python scripts/demo_github.py --url <public-github-url> --question "..."`, confirm search + RAG output.
-
-## Tech Stack
-
-- Python
-- FastAPI
-- Pydantic
-- pytest
-- Docker (local development only)
-
-## Architecture Decisions
-
-### Layered boundaries
-
-| Layer        | Responsibility                                                      |
-| ------------ | ------------------------------------------------------------------- |
-| `api/routes` | HTTP only: request parsing, status codes, response mapping          |
-| `schemas`    | Pydantic models for API input/output                                |
-| `domain`     | Internal dataclasses with no FastAPI dependency                     |
-| `services`   | Business logic (scanning, extraction, chunking, embeddings, search) |
-| `utils`      | Small reusable helpers (file filtering, line counting)              |
-| `core`       | Shared config and domain errors                                     |
-
-### Scanner behavior
-
-- Walks the filesystem recursively from the resolved absolute path.
-- Skips known noise directories: `.git`, `node_modules`, `dist`, `build`, `target`, `venv`, `.venv`, `__pycache__`, `.pytest_cache`, `.idea`, `.vscode`.
-- Skips sensitive files before any content processing: `.env`, `.env.local`, `.env.*`, `*.pem`, `*.key`, `id_rsa`, `id_ed25519`, `credentials.json`, `secrets.json`.
-- Skips binary files (null-byte detection) and files larger than 1 MB.
-- Counts lines only for readable UTF-8 text files.
-- Aggregates extension counts into `languages`.
-- Records ignored directories and ignored sensitive files in scan results.
-
-### Secret file exclusion
-
-Sensitive files are excluded at scan time, so they never flow into chunking or embedding. This prevents API keys and credentials from being indexed or returned in search results.
-
-Never commit `.env` files. Treat repository scanning as untrusted input when pointing at unknown paths.
-
-### Error handling
-
-- Missing path → `404` with `PathNotFoundError` message.
-- Path exists but is not a directory → `400` with `NotADirectoryError` message.
-- Index not found → `404`.
-- Chunk limit exceeded → `400` before embedding API calls.
-- OpenAI quota/billing exceeded → `402`.
-- OpenAI rate limit → `429`.
-- Errors are raised in `services`, mapped to HTTP in `api/routes`.
-
-### Dependency injection
-
-- `RepositoryScanner` is injected via FastAPI `Depends` in the scan route to keep routes testable and swappable later.
-
-### What we intentionally avoided (historical / still out of scope)
-
-- No GitHub API (local paths first).
-- No agents or MCP in v1.
-- No cloud deployment in v1.
-- No in-memory cache in M5+.
-
-## Learning Goals
-
-- Recover Python fluency.
-- Practice clean backend structure.
-- Build confidence reading and reviewing AI-generated code.
-
-### Embedding providers
-
-- `EmbeddingProvider` protocol defines `embed_text` / `embed_texts` and `model_name`.
-- `get_embedding_provider()` selects OpenAI, Gemini, or `fake` via `EMBEDDING_PROVIDER`.
-- Indexer and search depend only on the protocol, not on a specific vendor.
-- `FakeEmbeddingProvider` maps keywords (`scanner`, `chunk`, `config`) to deterministic vectors for tests and local dev.
-
-### Local development with fake provider
-
-Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Gemini. No API key required.
-
-### OpenAI quota / billing errors
-
-`OpenAIEmbeddingProvider` catches OpenAI `RateLimitError` and maps quota issues to `EmbeddingProviderError` with HTTP `402`. Rate limits without quota exhaustion return HTTP `429`. The API never exposes raw OpenAI exceptions.
-
-### Indexing safety limit
-
-`MAX_CHUNKS_TO_EMBED` (default `50`) is checked in `RepositoryIndexer` before calling the embedding provider. Repositories exceeding this limit return `400` without incurring API cost.
-
-### Character-length chunk safeguard
-
-`MAX_CHARS_PER_CHUNK` (default `12000`) is injected into `ChunkingService`. After line-based windows are built, oversized content is split into character subchunks with sequential `chunk-NNN` IDs. Line ranges are preserved as best-effort from the original window. No tokenizer dependency.
-
-### Docker (local development)
-
-- `Dockerfile` builds a Python 3.11 image with `requirements.txt` dependencies and `git` for GitHub ingestion.
-- `docker-compose.yml` runs the API on port 8000, loads `.env`, and overrides `SQLITE_DB_PATH` to `/app/data/ai_repository_assistant.db` (even if `.env` uses a local relative path).
-- Host `./data` is bind-mounted to `/app/data`; indexes persist across container restarts as long as `./data` is kept on the host.
-- `${REPO_MOUNT_SOURCE:-.}:/workspace:ro` mounts a repository read-only at `/workspace`; set `REPO_MOUNT_SOURCE` to index a different repo, always using `{"path": "/workspace"}` in API requests.
-- `.env` is gitignored and excluded from the image; `.env.example` defaults to `EMBEDDING_PROVIDER=fake` and `LLM_PROVIDER=fake`.
-- Docker is not production deployment; it standardizes the local developer experience.
-
-### SQLite persistence
-
-- `SQLITE_DB_PATH` (default `./data/ai_repository_assistant.db`) is the single source of truth.
-- `RepositoryIndexer` and `SemanticSearchService` depend on the `IndexStore` protocol, not SQLite directly.
-- `SQLiteIndexStore.search()` loads chunks from disk, computes cosine similarity in Python, filters `include_tests`, ranks, and returns `top_k`.
-- Raises `IndexNotFoundError` before returning empty results when the index does not exist.
-- `created_at` uses timezone-aware UTC ISO timestamps.
-- `data/` and `*.db` files are gitignored.
-
-### Future performance work (deferred)
-
-- In-memory cache in front of SQLite for hot indexes
-- Postgres + pgvector if scale requires it
-- Incremental reindexing
-
-### GitHub ingestion
-
-- `GitHubRepositoryIngestor` validates URL, clones to `tempfile.TemporaryDirectory`, calls `RepositoryIndexer`, cleans up clone.
-- `repository_path` in the index reflects the temporary clone path at index time; search/ask use persisted chunks in SQLite.
-- Local path ingestion via `POST /repositories/index` is unchanged.
-
-### RAG answering
-
-- `/repositories/search` returns ranked chunks only.
-- `/repositories/ask` reuses `SemanticSearchService`, then calls `LLMProvider` to synthesize a grounded answer.
-- Prompt templates live in `rag_prompt.py`; providers only handle API calls.
-- Sources are returned separately from the answer (metadata only, no chunk body in citations).
-- If retrieval returns no chunks, the service answers with a safe insufficient-context message without calling the LLM.
-
-## Next Steps (post-M8)
-
-1. Manual demo verification with a public GitHub repository and fake providers
-2. Mark v1 portfolio-complete after local + Docker + GitHub + demo flows are verified
-3. Private repo / GitHub token support (future)
-4. Agent orchestration and GitHub API expansion (future)
-
-### Project Scope Rule
+## Project Scope Rule
 
 This project must reach a clear product-complete v1 instead of becoming an endless experiment.
 
-The goal is to build a complete backend-first AI repository assistant with a defined finish line. Future scalability is important, but advanced ideas should be documented as future improvements unless they are part of the current milestone scope.
+The goal is a complete backend-first AI repository assistant with a defined finish line. Future scalability matters, but advanced ideas are documented as optional improvements unless explicitly promoted into a new milestone.
 
-### Product-complete v1 target
+**v1 is closed after M9.** New work should be treated as a separate post-v1 effort.
 
-The project is considered complete for portfolio v1 when it includes:
+## Product-complete v1 checklist
+
+Delivered:
 
 - FastAPI backend foundation
 - Local repository scanning
@@ -298,17 +37,167 @@ The project is considered complete for portfolio v1 when it includes:
 - Semantic search
 - RAG answering with citations
 - SQLite persistence and index management
-- Docker/developer setup
-- A clear demo flow
-- Professional README, architecture notes and future improvements
+- Docker / developer setup
+- Public GitHub ingestion
+- Clear CLI demo flow
+- Professional README, architecture notes, limitations, and future work
 
-Out of scope for v1 unless explicitly promoted later:
+Explicitly out of scope for v1:
 
 - Multi-user authentication
 - Cloud deployment
-- Advanced agents
-- MCP integration
+- Advanced agents / MCP
 - Full UI
-- Postgres/pgvector migration
+- Postgres / pgvector
 - In-memory cache optimization
 - Incremental reindexing
+- Private GitHub repositories
+
+## Milestones
+
+### Milestone 9 — Portfolio Polish + v1 Closure (completed)
+
+**Problem M9 solves:** The product works end-to-end; reviewers still need a clear public story—what it is, how to run it, how it is designed, and where it stops.
+
+**Added:**
+
+- README restructured as the public portfolio document
+- Mermaid architecture diagram (GitHub as source adapter → shared pipeline)
+- Design decisions / trade-offs, limitations, and future work separated
+- `PORTFOLIO_NOTES.md` for interview pitch and CV bullets
+- v1 status marked complete
+
+**Out of scope for M9:** new API endpoints, backend features, UI, agents, cloud deployment.
+
+### Milestone 8 — Demo / CLI Flow (completed)
+
+**Problem the demo solves:** Portfolio reviewers need a one-command way to see the full product flow without assembling curl requests by hand.
+
+**Why HTTP instead of internal services:** The script behaves like an external client, validates the real API contract, and stays decoupled from backend internals.
+
+**Added:**
+
+- `scripts/demo_github.py` (`--url`, `--question`, `--api-base-url`, `--top-k`, `--include-tests`)
+- Step-by-step output: health → index-github → search → ask → list indexes
+- Tests with mocked `httpx` (no live API / GitHub / OpenAI / Gemini)
+- Character-length chunk safeguard (`MAX_CHARS_PER_CHUNK`) after OpenAI embedding limit discovery during manual testing
+
+**Manual verification:** Completed with fake providers and OpenAI.
+
+### Milestone 7 — GitHub Ingestion for Public Repositories (completed)
+
+- `POST /repositories/index-github` for public `https://github.com/owner/repo` URLs
+- `GitHubRepositoryIngestor` with `git clone --depth 1` via `subprocess.run` (no `shell=True`)
+- URL validation; temporary clone cleanup; reuses `RepositoryIndexer` → `SQLiteIndexStore`
+- `git` installed in Docker image
+- Tests mock clone operations
+
+### Milestone 6 — Docker + Developer Experience (completed)
+
+- `Dockerfile`, `.dockerignore`, `docker-compose.yml`
+- `./data` bind mount for SQLite; fake providers default in `.env.example`
+- Docker for local reproducibility, not production deployment
+
+### Milestone 5 — SQLite Persistence + Index Management (completed)
+
+- `IndexStore` protocol + `SQLiteIndexStore`
+- Index management endpoints; search/ask survive restart
+- Tests use temporary SQLite files only
+
+### Milestone 4 — RAG Answering with Citations (completed)
+
+- `LLMProvider` + OpenAI / Gemini / fake
+- `RAGAnswerService` + `POST /repositories/ask` with sources
+
+### Milestone 3 — Embeddings + Semantic Search (completed)
+
+- `EmbeddingProvider` + OpenAI / Gemini / fake
+- `RepositoryIndexer`, `SemanticSearchService`
+- `source_type`, `include_tests`, `MAX_CHUNKS_TO_EMBED`
+
+### Milestone 2 — Content Extraction + Chunking (completed)
+
+- `ContentExtractor`, `ChunkingService`, `POST /repositories/chunks`
+- Skipped-file traceability; overlap validation
+
+### Milestone 1 — Backend Foundation + Repository Scanner (completed)
+
+- `GET /health`, `POST /repositories/scan`
+- Layered structure; sensitive file exclusion; pytest foundation
+
+## Tech Stack
+
+- Python 3.11+
+- FastAPI, Pydantic, uvicorn
+- pytest, httpx
+- SQLite
+- Docker (local development only)
+- OpenAI / Gemini SDKs (optional at runtime; fake providers for tests)
+
+## Architecture Decisions
+
+### Layered boundaries
+
+| Layer | Responsibility |
+| --- | --- |
+| `api/routes` | HTTP only: request parsing, status codes, response mapping |
+| `schemas` | Pydantic models for API input/output |
+| `domain` | Internal dataclasses with no FastAPI dependency |
+| `services` | Business logic (scanning, extraction, chunking, embeddings, search, RAG) |
+| `utils` | Small reusable helpers |
+| `core` | Shared config and domain errors |
+
+### Design trade-offs (summary)
+
+- **SQLite over vector DB** — local-first v1 without ops complexity
+- **Python cosine similarity** — adequate for small indexes; pgvector deferred
+- **Provider protocols** — OpenAI / Gemini / fake without rewriting indexer or RAG
+- **Fake providers** — free demos and deterministic CI
+- **GitHub as adapter** — one pipeline for local and remote sources
+- **Docker for DX** — not production hosting
+- **Char limit vs tokenizer** — protect embedding APIs without tiktoken in v1
+
+### Scanner and safety
+
+- Skips noise directories and sensitive files before content processing
+- Binary detection and 1 MB size cap
+- Cloned repos are untrusted; no code execution; no `shell=True`
+- Errors raised in services, mapped to HTTP in routes
+
+### Persistence and search
+
+- `SQLITE_DB_PATH` is the single source of truth
+- Services depend on `IndexStore`, not SQLite directly
+- `created_at` uses timezone-aware UTC ISO timestamps
+- For GitHub indexes, `repository_path` may be a temp clone path; `github_url` identifies the source
+
+### Embedding / LLM
+
+- Factories select providers via env
+- Quota → `402`, rate limit → `429`
+- `MAX_CHUNKS_TO_EMBED` and `MAX_CHARS_PER_CHUNK` checked before / during indexing
+
+### RAG
+
+- Search returns ranked chunks; ask synthesizes grounded answers
+- Sources are metadata only (no chunk body in citations)
+- Insufficient context returns a safe message without calling the LLM
+
+## Learning Goals
+
+- Recover Python fluency
+- Practice clean backend structure
+- Build confidence reading and reviewing AI-generated code
+
+## Post-v1 Future Improvements
+
+Optional ideas if the project is extended later. **Not required for portfolio v1.**
+
+1. Private repository support and GitHub token / GitHub App auth
+2. Branch selection, size limits, rate-limit handling
+3. Incremental reindexing and optional clone cache
+4. Postgres + pgvector or a dedicated vector DB
+5. In-memory cache for hot indexes
+6. Cloud deployment, secrets management, CI/CD
+7. UI
+8. Agents / MCP / tool calling
