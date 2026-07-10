@@ -116,6 +116,7 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `EMBEDDING_PROVIDER`     | `openai` in code; `fake` in `.env.example`  | `fake`, `openai`, or `gemini`                                                            |
 | `LLM_PROVIDER`           | `openai` in code; `fake` in `.env.example`  | `fake`, `openai`, or `gemini`                                                            |
 | `MAX_CHUNKS_TO_EMBED`    | `50`                                        | Safety cap before embedding API calls                                                    |
+| `MAX_CHARS_PER_CHUNK`    | `12000`                                     | Max characters per chunk; oversized line windows are split before embedding              |
 | `SQLITE_DB_PATH`         | `./data/ai_repository_assistant.db` locally | SQLite file path; overridden to `/app/data/ai_repository_assistant.db` in Docker Compose |
 | `OPENAI_API_KEY`         | empty                                       | Required when using OpenAI providers                                                     |
 | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small`                    | OpenAI embedding model                                                                   |
@@ -338,6 +339,10 @@ If OpenAI quota is exceeded, `/repositories/index` returns `402` with a clear me
 ### Safety limit: `MAX_CHUNKS_TO_EMBED`
 
 Default `50`. Repositories with more chunks return `400` before any embedding API call.
+
+### Character limit: `MAX_CHARS_PER_CHUNK`
+
+Default `12000`. Line-based chunking still runs first. If a line-window chunk exceeds this character limit (for example a very long minified line), it is split into smaller character-based subchunks before embedding. This applies to both local and GitHub indexing.
 
 ## Project structure
 

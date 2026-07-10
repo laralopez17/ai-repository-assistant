@@ -26,7 +26,7 @@ def _build_ingestor(
     repository_indexer = RepositoryIndexer(
         scanner=RepositoryScanner(),
         content_extractor=ContentExtractor(),
-        chunking_service=ChunkingService(),
+        chunking_service=ChunkingService(max_chars_per_chunk=12000),
         embedding_provider=FakeEmbeddingProvider(),
         index_store=index_store,
     )

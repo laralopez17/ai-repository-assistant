@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.core.config import SQLITE_DB_PATH
+from app.core.config import MAX_CHARS_PER_CHUNK, SQLITE_DB_PATH
 from app.core.database import init_database
 from app.core.errors import (
     AppError,
@@ -73,7 +73,7 @@ def get_content_extractor() -> ContentExtractor:
 
 
 def get_chunking_service() -> ChunkingService:
-    return ChunkingService()
+    return ChunkingService(max_chars_per_chunk=MAX_CHARS_PER_CHUNK)
 
 
 def get_index_store() -> IndexStore:

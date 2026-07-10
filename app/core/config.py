@@ -51,6 +51,7 @@ GEMINI_EMBEDDING_MODEL = os.getenv(
 ).strip()
 
 MAX_CHUNKS_TO_EMBED = int(os.getenv("MAX_CHUNKS_TO_EMBED", "50"))
+MAX_CHARS_PER_CHUNK = int(os.getenv("MAX_CHARS_PER_CHUNK", "12000"))
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").strip().lower()
 OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini").strip()

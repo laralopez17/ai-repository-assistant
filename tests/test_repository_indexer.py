@@ -17,7 +17,7 @@ def indexer_setup(index_store) -> tuple[RepositoryIndexer, SQLiteIndexStore]:
     indexer = RepositoryIndexer(
         scanner=RepositoryScanner(),
         content_extractor=ContentExtractor(),
-        chunking_service=ChunkingService(),
+        chunking_service=ChunkingService(max_chars_per_chunk=12000),
         embedding_provider=FakeEmbeddingProvider(),
         index_store=index_store,
     )
@@ -55,7 +55,7 @@ def test_repository_indexer_raises_when_chunk_limit_exceeded(
     indexer = RepositoryIndexer(
         scanner=RepositoryScanner(),
         content_extractor=ContentExtractor(),
-        chunking_service=ChunkingService(),
+        chunking_service=ChunkingService(max_chars_per_chunk=12000),
         embedding_provider=FakeEmbeddingProvider(),
         index_store=index_store,
         max_chunks_to_embed=2,

@@ -231,6 +231,10 @@ Set `EMBEDDING_PROVIDER=fake` in `.env` to index and search without OpenAI or Ge
 
 `MAX_CHUNKS_TO_EMBED` (default `50`) is checked in `RepositoryIndexer` before calling the embedding provider. Repositories exceeding this limit return `400` without incurring API cost.
 
+### Character-length chunk safeguard
+
+`MAX_CHARS_PER_CHUNK` (default `12000`) is injected into `ChunkingService`. After line-based windows are built, oversized content is split into character subchunks with sequential `chunk-NNN` IDs. Line ranges are preserved as best-effort from the original window. No tokenizer dependency.
+
 ### Docker (local development)
 
 - `Dockerfile` builds a Python 3.11 image with `requirements.txt` dependencies and `git` for GitHub ingestion.
